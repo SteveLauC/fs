@@ -2,7 +2,6 @@
 
 use super::libc_like_syscall;
 use bitflags::bitflags;
-use std::ffi::c_void;
 use std::{
     collections::VecDeque,
     ffi::{CStr, CString, OsStr, OsString},
@@ -100,11 +99,16 @@ bitflags! {
 /// Opens a file
 ///
 /// Note: `path` should not contain byte 0, or this function will panic.
-pub(crate) fn open<P: AsRef<Path>>(path: P, flag: Flags) -> Result<OwnedFd> {
+pub(crate) fn open<P: AsRef<Path>>(
+    path: P,
+    flag: Flags,
+    mode: Mode,
+) -> Result<OwnedFd> {
     let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
     let flag = flag.bits();
+    let mode = mode.bits();
 
-    match libc_like_syscall::open(path.as_ptr(), flag) {
+    match libc_like_syscall::open(path.as_ptr(), flag, mode) {
         Ok(raw_fd) => Ok(unsafe { OwnedFd::from_raw_fd(raw_fd) }),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
     }
@@ -158,7 +162,7 @@ pub(crate) fn pread<Fd: AsFd>(
 
     libc_like_syscall::pread(
         raw_fd,
-        buf.as_mut_ptr() as *mut c_void,
+        buf.as_mut_ptr() as *mut libc::c_void,
         buf.len(),
         offset,
     )
@@ -176,7 +180,7 @@ pub(crate) fn pwrite<Fd: AsFd>(
 
     libc_like_syscall::pwrite(
         raw_fd,
-        buf.as_ptr() as *const c_void,
+        buf.as_ptr() as *const libc::c_void,
         buf.len(),
         offset,
     )
@@ -410,7 +414,11 @@ impl Dirent {
 
 impl Dir {
     pub(crate) fn opendir<P: AsRef<Path>>(name: P) -> Result<Dir> {
-        let fd = open(name.as_ref(), Flags::O_RDONLY | Flags::O_DIRECTORY)?;
+        let fd = open(
+            name.as_ref(),
+            Flags::O_RDONLY | Flags::O_DIRECTORY,
+            Mode::empty(),
+        )?;
         Ok(Self {
             fd,
             root: name.as_ref().to_owned(),
@@ -495,7 +503,7 @@ mod test {
 
     #[test]
     fn test_open() {
-        open("/tmp", Flags::O_RDONLY).unwrap();
+        open("/tmp", Flags::O_RDONLY, Mode::empty()).unwrap();
     }
 
     #[test]
@@ -511,7 +519,8 @@ mod test {
         let file = "/tmp/test_read_write";
         let fd_with_read_permission =
             creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
-        let fd_with_write_permission = open(file, Flags::O_WRONLY).unwrap();
+        let fd_with_write_permission =
+            open(file, Flags::O_WRONLY, Mode::empty()).unwrap();
         assert_eq!(
             write(fd_with_write_permission.as_fd(), b"hello").unwrap(),
             5
@@ -532,7 +541,7 @@ mod test {
         let file = "/tmp/test_pread";
         creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
 
-        let fd = open(file, Flags::O_RDWR).unwrap();
+        let fd = open(file, Flags::O_RDWR, Mode::empty()).unwrap();
         write(fd.as_fd(), b"hello world").unwrap();
 
         let mut buf = [0_u8; 5];
@@ -548,7 +557,7 @@ mod test {
         let file = "/tmp/test_pwrite";
         creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
 
-        let fd = open(file, Flags::O_RDWR).unwrap();
+        let fd = open(file, Flags::O_RDWR, Mode::empty()).unwrap();
         write(fd.as_fd(), b"hello world").unwrap();
 
         assert_eq!(pwrite(fd.as_fd(), b"steve", 6).unwrap(), 5);
@@ -642,7 +651,7 @@ mod test {
     #[test]
     fn test_getdents64() {
         let tmp_dir = "/tmp";
-        let tmp_dir_fd = open(tmp_dir, Flags::O_RDONLY).unwrap();
+        let tmp_dir_fd = open(tmp_dir, Flags::O_RDONLY, Mode::empty()).unwrap();
         let mut buf = [0_u8; 100];
         getdents64(tmp_dir_fd.as_fd(), &mut buf).unwrap();
     }
@@ -676,7 +685,7 @@ mod test {
     fn test_lseek64() {
         let file = "/tmp/test_lseek64";
         creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
-        let fd = open(file, Flags::O_RDWR).unwrap();
+        let fd = open(file, Flags::O_RDWR, Mode::empty()).unwrap();
         write(fd.as_fd(), b"hello").unwrap();
 
         assert_eq!(lseek64(fd.as_fd(), 0, Whence::SeekSet).unwrap(), 0);

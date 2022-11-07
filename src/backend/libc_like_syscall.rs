@@ -38,8 +38,10 @@ fn syscall_result(ret_val: usize) -> Result<isize, c_int> {
 pub(crate) fn open(
     pathname: *const c_char,
     flags: c_int,
+    mode: mode_t,
 ) -> Result<RawFd, c_int> {
-    let res = unsafe { syscall!(OPEN, pathname as usize, flags as usize) };
+    let res =
+        unsafe { syscall!(OPEN, pathname as usize, flags as usize, mode) };
 
     syscall_result(res).map(|fd| fd as RawFd)
 }
@@ -49,16 +51,7 @@ pub(crate) fn creat(
     pathname: *const c_char,
     mode: mode_t,
 ) -> Result<RawFd, c_int> {
-    let res = unsafe {
-        syscall!(
-            OPEN,
-            pathname as usize,
-            (O_RDONLY | O_CREAT | O_TRUNC) as usize,
-            mode as usize
-        )
-    };
-
-    syscall_result(res).map(|fd| fd as RawFd)
+    open(pathname, O_RDONLY | O_CREAT | O_TRUNC, mode)
 }
 
 // Only used in test.
@@ -281,7 +274,7 @@ mod test {
     #[test]
     fn test_open_close() {
         let fd =
-            open("/proc/self/mounts\0".as_ptr() as *const c_char, O_RDONLY)
+            open("/proc/self/mounts\0".as_ptr() as *const c_char, O_RDONLY, 0)
                 .unwrap();
 
         close(fd).unwrap();
@@ -312,7 +305,7 @@ mod test {
             creat(file.as_ptr() as *const c_char, 0o644).unwrap();
 
         let fd_with_write_permission =
-            open(file.as_ptr() as *const c_char, O_WRONLY).unwrap();
+            open(file.as_ptr() as *const c_char, O_WRONLY, 0).unwrap();
 
         let file_contents = "hello\0";
         assert_eq!(
@@ -456,7 +449,7 @@ mod test {
     fn test_getdents64() {
         let tmp_dir = "/tmp\0";
         let tmp_dir_fd =
-            open(tmp_dir.as_ptr() as *const c_char, O_RDONLY).unwrap();
+            open(tmp_dir.as_ptr() as *const c_char, O_RDONLY, 0).unwrap();
         let mut buf = [0_u8; 100];
         getdents64(tmp_dir_fd, &mut buf as *mut u8 as *mut c_void, 100)
             .unwrap();
@@ -488,7 +481,7 @@ mod test {
         let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
         close(fd).unwrap();
 
-        let fd = open(file.as_ptr() as *const c_char, O_RDWR).unwrap();
+        let fd = open(file.as_ptr() as *const c_char, O_RDWR, 0).unwrap();
 
         write(fd, "hello\0".as_ptr() as *const c_void, 5).unwrap();
 
@@ -504,7 +497,7 @@ mod test {
         let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
         close(fd).unwrap();
 
-        let fd = open(file.as_ptr() as *const c_char, O_RDWR).unwrap();
+        let fd = open(file.as_ptr() as *const c_char, O_RDWR, 0).unwrap();
         write(fd, "hello world\0".as_ptr() as *const c_void, 11).unwrap();
 
         let mut buf = [0_u8; 5];
@@ -525,7 +518,7 @@ mod test {
         let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
         close(fd).unwrap();
 
-        let fd = open(file.as_ptr() as *const c_char, O_RDWR).unwrap();
+        let fd = open(file.as_ptr() as *const c_char, O_RDWR, 0).unwrap();
         write(fd, "hello world\0".as_ptr() as *const c_void, 11).unwrap();
 
         assert_eq!(

@@ -4,5 +4,5 @@
 //! 1. libc-like syscalls.
 //! 2. Rusty encapsulations for those libc-like syscalls.
 
-mod encapsulation;
+pub(crate) mod encapsulation;
 mod libc_like_syscall;
