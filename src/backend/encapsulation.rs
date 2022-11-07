@@ -2,6 +2,7 @@
 
 use super::libc_like_syscall;
 use bitflags::bitflags;
+use std::ffi::c_void;
 use std::{
     collections::VecDeque,
     ffi::{CStr, CString, OsStr, OsString},
@@ -142,6 +143,42 @@ pub(crate) fn write<Fd: AsFd>(fd: Fd, buf: &[u8]) -> Result<usize> {
         raw_fd,
         buf.as_ptr() as *const libc::c_void,
         buf.len(),
+    )
+    .map_err(Error::from_raw_os_error)
+}
+
+/// Read from a file at the given offset
+pub(crate) fn pread<Fd: AsFd>(
+    fd: Fd,
+    buf: &mut [u8],
+    offset: u64,
+) -> Result<usize> {
+    let raw_fd = fd.as_fd().as_raw_fd();
+    let offset = offset as libc::off_t;
+
+    libc_like_syscall::pread(
+        raw_fd,
+        buf.as_mut_ptr() as *mut c_void,
+        buf.len(),
+        offset,
+    )
+    .map_err(Error::from_raw_os_error)
+}
+
+/// Write to a file at the given offset
+pub(crate) fn pwrite<Fd: AsFd>(
+    fd: Fd,
+    buf: &[u8],
+    offset: u64,
+) -> Result<usize> {
+    let raw_fd = fd.as_fd().as_raw_fd();
+    let offset = offset as libc::off_t;
+
+    libc_like_syscall::pwrite(
+        raw_fd,
+        buf.as_ptr() as *const c_void,
+        buf.len(),
+        offset,
     )
     .map_err(Error::from_raw_os_error)
 }
@@ -414,6 +451,44 @@ impl Dir {
     }
 }
 
+/// Change Root Directory.
+///
+/// Note: `path_name` should not contain byte 0, or this function will panic.
+pub(crate) fn chroot<P: AsRef<Path>>(path: P) -> Result<()> {
+    let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+    libc_like_syscall::chroot(path.as_ptr()).map_err(Error::from_raw_os_error)
+}
+
+/// `whence` argument of `lseek64(2)`
+pub(crate) enum Whence {
+    SeekSet,
+    SeekCur,
+    SeekEnd,
+}
+
+impl Whence {
+    fn bits(&self) -> libc::c_int {
+        match self {
+            Whence::SeekSet => libc::SEEK_SET,
+            Whence::SeekCur => libc::SEEK_CUR,
+            Whence::SeekEnd => libc::SEEK_END,
+        }
+    }
+}
+
+/// reposition read/write file offset
+pub(crate) fn lseek64<Fd: AsFd>(
+    fd: Fd,
+    offset: i64,
+    whence: Whence,
+) -> Result<u64> {
+    let raw_fd = fd.as_fd().as_raw_fd();
+    let whence = whence.bits();
+
+    libc_like_syscall::lseek64(raw_fd, offset, whence)
+        .map_err(Error::from_raw_os_error)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -449,6 +524,39 @@ mod test {
         );
         assert_eq!(&buffer, b"hello");
 
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_pread() {
+        let file = "/tmp/test_pread";
+        creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+
+        let fd = open(file, Flags::O_RDWR).unwrap();
+        write(fd.as_fd(), b"hello world").unwrap();
+
+        let mut buf = [0_u8; 5];
+        assert_eq!(pread(fd.as_fd(), &mut buf, 6).unwrap(), 5);
+
+        assert_eq!(&buf, b"world");
+
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_pwrite() {
+        let file = "/tmp/test_pwrite";
+        creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+
+        let fd = open(file, Flags::O_RDWR).unwrap();
+        write(fd.as_fd(), b"hello world").unwrap();
+
+        assert_eq!(pwrite(fd.as_fd(), b"steve", 6).unwrap(), 5);
+
+        let mut buf = [0_u8; 11];
+        assert_eq!(pread(fd.as_fd(), &mut buf, 0).unwrap(), 11);
+
+        assert_eq!(&buf, b"hello steve");
         unlink(file).unwrap();
     }
 
@@ -536,7 +644,7 @@ mod test {
         let tmp_dir = "/tmp";
         let tmp_dir_fd = open(tmp_dir, Flags::O_RDONLY).unwrap();
         let mut buf = [0_u8; 100];
-        let num_read = getdents64(tmp_dir_fd.as_fd(), &mut buf).unwrap();
+        getdents64(tmp_dir_fd.as_fd(), &mut buf).unwrap();
     }
 
     #[test]
@@ -556,5 +664,23 @@ mod test {
         }
 
         assert_eq!(num_of_file, n_files);
+    }
+
+    #[test]
+    fn test_chroot() {
+        let error = chroot(".").unwrap_err();
+        assert_eq!(error.raw_os_error().unwrap(), libc::EPERM);
+    }
+
+    #[test]
+    fn test_lseek64() {
+        let file = "/tmp/test_lseek64";
+        creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+        let fd = open(file, Flags::O_RDWR).unwrap();
+        write(fd.as_fd(), b"hello").unwrap();
+
+        assert_eq!(lseek64(fd.as_fd(), 0, Whence::SeekSet).unwrap(), 0);
+
+        unlink(file).unwrap();
     }
 }

@@ -11,12 +11,13 @@
 
 use libc::{
     blkcnt64_t, blksize_t, c_char, c_int, c_void, dev_t, gid_t, ino64_t,
-    mode_t, nlink_t, off_t, size_t, time_t, uid_t, O_CREAT, O_RDONLY, O_TRUNC,
+    mode_t, nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT, O_RDONLY,
+    O_TRUNC,
 };
 use sc::{
     nr::{
-        CLOSE, FSTAT, GETDENTS64, LINK, LSTAT, MKDIR, OPEN, RENAME, RMDIR,
-        STAT, SYMLINK, UNLINK, WRITE,
+        CHROOT, CLOSE, FSTAT, GETDENTS64, LINK, LSEEK, LSTAT, MKDIR, OPEN,
+        RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
     },
     syscall,
 };
@@ -90,6 +91,46 @@ pub(crate) fn write(
         unsafe { syscall!(WRITE, fd as usize, buf as usize, count as usize) };
 
     syscall_result(res).map(|num_read| num_read as usize)
+}
+
+#[inline]
+pub(crate) fn pread(
+    fd: c_int,
+    buf: *mut c_void,
+    count: size_t,
+    offset: off_t,
+) -> Result<usize, c_int> {
+    let res = unsafe {
+        syscall!(
+            PREAD64,
+            fd as usize,
+            buf as usize,
+            count as usize,
+            offset as usize
+        )
+    };
+
+    syscall_result(res).map(|num_read| num_read as usize)
+}
+
+#[inline]
+pub(crate) fn pwrite(
+    fd: c_int,
+    buf: *const c_void,
+    count: size_t,
+    offset: off_t,
+) -> Result<usize, c_int> {
+    let res = unsafe {
+        syscall!(
+            PWRITE64,
+            fd as usize,
+            buf as usize,
+            count as usize,
+            offset as usize
+        )
+    };
+
+    syscall_result(res).map(|num_written| num_written as usize)
 }
 
 #[inline]
@@ -209,18 +250,39 @@ pub(crate) fn getdents64(
     syscall_result(res).map(|num_read| num_read as usize)
 }
 
+#[inline]
+pub(crate) fn chroot(path: *const c_char) -> Result<(), c_int> {
+    let res = unsafe { syscall!(CHROOT, path as usize) };
+
+    syscall_result(res).map(drop)
+}
+
+#[inline]
+pub(crate) fn lseek64(
+    fd: c_int,
+    offset: off64_t,
+    whence: c_int,
+) -> Result<u64, c_int> {
+    let res = unsafe {
+        syscall!(LSEEK, fd as usize, offset as usize, whence as usize)
+    };
+
+    syscall_result(res).map(|new_offset| new_offset as u64)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use libc::{EISDIR, ENOENT, ENOTDIR, O_WRONLY, S_IFLNK, S_IFMT, S_IFREG};
+    use libc::{
+        EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, S_IFLNK, S_IFMT,
+        S_IFREG,
+    };
 
     #[test]
     fn test_open_close() {
-        let fd = open(
-            "/proc/self/mounts\0".as_ptr() as *const c_char,
-            libc::O_RDONLY,
-        )
-        .unwrap();
+        let fd =
+            open("/proc/self/mounts\0".as_ptr() as *const c_char, O_RDONLY)
+                .unwrap();
 
         close(fd).unwrap();
     }
@@ -396,9 +458,8 @@ mod test {
         let tmp_dir_fd =
             open(tmp_dir.as_ptr() as *const c_char, O_RDONLY).unwrap();
         let mut buf = [0_u8; 100];
-        let num_read =
-            getdents64(tmp_dir_fd, &mut buf as *mut u8 as *mut c_void, 100)
-                .unwrap();
+        getdents64(tmp_dir_fd, &mut buf as *mut u8 as *mut c_void, 100)
+            .unwrap();
     }
 
     #[test]
@@ -411,6 +472,74 @@ mod test {
             getdents64(fd, &mut buf as *mut u8 as *mut c_void, 100),
             Err(ENOTDIR)
         );
+
+        close(fd).unwrap();
+        unlink(file.as_ptr() as *const c_char).unwrap();
+    }
+
+    #[test]
+    fn test_chroot() {
+        assert_eq!(chroot(".\0".as_ptr() as *const c_char), Err(libc::EPERM));
+    }
+
+    #[test]
+    fn test_lseek64() {
+        let file = "/tmp/test_lseek\0";
+        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        close(fd).unwrap();
+
+        let fd = open(file.as_ptr() as *const c_char, O_RDWR).unwrap();
+
+        write(fd, "hello\0".as_ptr() as *const c_void, 5).unwrap();
+
+        assert_eq!(lseek64(fd, 0, SEEK_SET).unwrap(), 0);
+
+        close(fd).unwrap();
+        unlink(file.as_ptr() as *const c_char).unwrap();
+    }
+
+    #[test]
+    fn test_pread() {
+        let file = "/tmp/test_pread\0";
+        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        close(fd).unwrap();
+
+        let fd = open(file.as_ptr() as *const c_char, O_RDWR).unwrap();
+        write(fd, "hello world\0".as_ptr() as *const c_void, 11).unwrap();
+
+        let mut buf = [0_u8; 5];
+        assert_eq!(
+            pread(fd, buf.as_mut_ptr() as *mut c_void, 5, 6).unwrap(),
+            5
+        );
+
+        assert_eq!(&buf, b"world");
+
+        close(fd).unwrap();
+        unlink(file.as_ptr() as *const c_char).unwrap();
+    }
+
+    #[test]
+    fn test_pwrite() {
+        let file = "/tmp/test_pwrite\0";
+        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        close(fd).unwrap();
+
+        let fd = open(file.as_ptr() as *const c_char, O_RDWR).unwrap();
+        write(fd, "hello world\0".as_ptr() as *const c_void, 11).unwrap();
+
+        assert_eq!(
+            pwrite(fd, "steve\0".as_ptr() as *const c_void, 5, 6).unwrap(),
+            5
+        );
+
+        let mut buf = [0_u8; 11];
+        assert_eq!(
+            pread(fd, buf.as_mut_ptr() as *mut c_void, 11, 0).unwrap(),
+            11
+        );
+
+        assert_eq!(&buf, b"hello steve");
 
         close(fd).unwrap();
         unlink(file.as_ptr() as *const c_char).unwrap();
