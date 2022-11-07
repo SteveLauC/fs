@@ -1,6 +1,6 @@
 //! Rusty encapsulation for libc-like syscall.
 
-use super::syscall;
+use super::libc_like_syscall;
 use bitflags::bitflags;
 use std::{
     collections::VecDeque,
@@ -103,7 +103,7 @@ pub(crate) fn open<P: AsRef<Path>>(path: P, flag: Flags) -> Result<OwnedFd> {
     let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
     let flag = flag.bits();
 
-    match syscall::open(path.as_ptr(), flag) {
+    match libc_like_syscall::open(path.as_ptr(), flag) {
         Ok(raw_fd) => Ok(unsafe { OwnedFd::from_raw_fd(raw_fd) }),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
     }
@@ -116,7 +116,7 @@ pub(crate) fn creat<P: AsRef<Path>>(path: P, mode: Mode) -> Result<OwnedFd> {
     let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
     let mode = mode.bits();
 
-    match syscall::creat(path.as_ptr(), mode) {
+    match libc_like_syscall::creat(path.as_ptr(), mode) {
         Ok(raw_fd) => Ok(unsafe { OwnedFd::from_raw_fd(raw_fd) }),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
     }
@@ -126,16 +126,24 @@ pub(crate) fn creat<P: AsRef<Path>>(path: P, mode: Mode) -> Result<OwnedFd> {
 pub(crate) fn read<Fd: AsFd>(fd: Fd, buf: &mut [u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
-    syscall::read(raw_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::read(
+        raw_fd,
+        buf.as_mut_ptr() as *mut libc::c_void,
+        buf.len(),
+    )
+    .map_err(Error::from_raw_os_error)
 }
 
 /// Writes to a stream
 pub(crate) fn write<Fd: AsFd>(fd: Fd, buf: &[u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
-    syscall::write(raw_fd, buf.as_ptr() as *const libc::c_void, buf.len())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::write(
+        raw_fd,
+        buf.as_ptr() as *const libc::c_void,
+        buf.len(),
+    )
+    .map_err(Error::from_raw_os_error)
 }
 
 /// Makes a new name for a file
@@ -148,7 +156,7 @@ pub(crate) fn link<P: AsRef<Path>>(old_path: P, new_path: P) -> Result<()> {
     let new_path =
         CString::new(new_path.as_ref().as_os_str().as_bytes()).unwrap();
 
-    syscall::link(old_path.as_ptr(), new_path.as_ptr())
+    libc_like_syscall::link(old_path.as_ptr(), new_path.as_ptr())
         .map_err(Error::from_raw_os_error)
 }
 
@@ -159,7 +167,8 @@ pub(crate) fn unlink<P: AsRef<Path>>(path_name: P) -> Result<()> {
     let path_name =
         CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
 
-    syscall::unlink(path_name.as_ptr()).map_err(Error::from_raw_os_error)
+    libc_like_syscall::unlink(path_name.as_ptr())
+        .map_err(Error::from_raw_os_error)
 }
 
 /// Makes a new name for a file
@@ -171,7 +180,7 @@ pub(crate) fn symlink<P: AsRef<Path>>(target: P, link_path: P) -> Result<()> {
     let link_path =
         CString::new(link_path.as_ref().as_os_str().as_bytes()).unwrap();
 
-    syscall::symlink(target.as_ptr(), link_path.as_ptr())
+    libc_like_syscall::symlink(target.as_ptr(), link_path.as_ptr())
         .map_err(Error::from_raw_os_error)
 }
 
@@ -182,7 +191,7 @@ pub(crate) fn mkdir<P: AsRef<Path>>(path_name: P, mode: Mode) -> Result<()> {
     let path_name =
         CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
 
-    syscall::mkdir(path_name.as_ptr(), mode.bits())
+    libc_like_syscall::mkdir(path_name.as_ptr(), mode.bits())
         .map_err(Error::from_raw_os_error)
 }
 
@@ -193,7 +202,8 @@ pub(crate) fn rmdir<P: AsRef<Path>>(path_name: P) -> Result<()> {
     let path_name =
         CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
 
-    syscall::rmdir(path_name.as_ptr()).map_err(Error::from_raw_os_error)
+    libc_like_syscall::rmdir(path_name.as_ptr())
+        .map_err(Error::from_raw_os_error)
 }
 
 /// Changes the name or location of a file
@@ -206,36 +216,23 @@ pub(crate) fn rename<P: AsRef<Path>>(old_path: P, new_path: P) -> Result<()> {
     let new_path =
         CString::new(new_path.as_ref().as_os_str().as_bytes()).unwrap();
 
-    syscall::rename(old_path.as_ptr(), new_path.as_ptr())
+    libc_like_syscall::rename(old_path.as_ptr(), new_path.as_ptr())
         .map_err(Error::from_raw_os_error)
 }
 
 /// Get file status
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
-pub(crate) fn stat<P: AsRef<Path>>(path_name: P) -> Result<syscall::Stat> {
+pub(crate) fn stat<P: AsRef<Path>>(
+    path_name: P,
+) -> Result<libc_like_syscall::Stat> {
     let path_name =
         CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
-    let mut stat_buf = syscall::Stat::default();
+    let mut stat_buf = libc_like_syscall::Stat::default();
 
-    match syscall::stat(path_name.as_ptr(), &mut stat_buf as *mut syscall::Stat)
-    {
-        Ok(()) => Ok(stat_buf),
-        Err(errno) => Err(Error::from_raw_os_error(errno)),
-    }
-}
-
-/// Get file status
-///
-/// Note: `path_name` should not contain byte 0, or this function will panic.
-pub(crate) fn lstat<P: AsRef<Path>>(path_name: P) -> Result<syscall::Stat> {
-    let path_name =
-        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
-    let mut stat_buf = syscall::Stat::default();
-
-    match syscall::lstat(
+    match libc_like_syscall::stat(
         path_name.as_ptr(),
-        &mut stat_buf as *mut syscall::Stat,
+        &mut stat_buf as *mut libc_like_syscall::Stat,
     ) {
         Ok(()) => Ok(stat_buf),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
@@ -243,12 +240,31 @@ pub(crate) fn lstat<P: AsRef<Path>>(path_name: P) -> Result<syscall::Stat> {
 }
 
 /// Get file status
-pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<syscall::Stat> {
-    let mut stat_buf = syscall::Stat::default();
+///
+/// Note: `path_name` should not contain byte 0, or this function will panic.
+pub(crate) fn lstat<P: AsRef<Path>>(
+    path_name: P,
+) -> Result<libc_like_syscall::Stat> {
+    let path_name =
+        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
+    let mut stat_buf = libc_like_syscall::Stat::default();
 
-    match syscall::fstat(
+    match libc_like_syscall::lstat(
+        path_name.as_ptr(),
+        &mut stat_buf as *mut libc_like_syscall::Stat,
+    ) {
+        Ok(()) => Ok(stat_buf),
+        Err(errno) => Err(Error::from_raw_os_error(errno)),
+    }
+}
+
+/// Get file status
+pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<libc_like_syscall::Stat> {
+    let mut stat_buf = libc_like_syscall::Stat::default();
+
+    match libc_like_syscall::fstat(
         fd.as_fd().as_raw_fd(),
-        &mut stat_buf as *mut syscall::Stat,
+        &mut stat_buf as *mut libc_like_syscall::Stat,
     ) {
         Ok(()) => Ok(stat_buf),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
@@ -257,7 +273,7 @@ pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<syscall::Stat> {
 
 /// Gets directory entries
 pub(crate) fn getdents64<Fd: AsFd>(fd: Fd, dirp: &mut [u8]) -> Result<usize> {
-    syscall::getdents64(
+    libc_like_syscall::getdents64(
         fd.as_fd().as_raw_fd(),
         dirp.as_mut_ptr() as *mut libc::c_void,
         dirp.len(),
