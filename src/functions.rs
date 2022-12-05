@@ -74,8 +74,9 @@ pub fn read_dir<P: AsRef<Path>>(path: P) -> Result<ReadDir> {
 }
 
 /// Reads a symbolic link, returning the file that the link points to.
+#[inline]
 pub fn read_link<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
-    unimplemented!()
+    encapsulation::readlink(path.as_ref())
 }
 
 /// read_to_string: Read the entire contents of a file into a string.
@@ -145,7 +146,7 @@ pub fn fchown<F: AsFd>(
     unimplemented!()
 }
 
-/// lchown: Change the owner and group of the specified path, without
+/// Change the owner and group of the specified path, without
 /// dereferencing symbolic links.
 pub fn lchown<P: AsRef<Path>>(
     dir: P,

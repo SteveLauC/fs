@@ -1,10 +1,15 @@
+use crate::backend::encapsulation;
 use crate::{
-    filetimes::FileTimes, metadata::Metadata, open_option::OpenOptions,
-    permissions::Permissions,
+    filetimes::FileTimes, functions::read_link, metadata::Metadata,
+    non_fs::SystemTime, open_option::OpenOptions, permissions::Permissions,
 };
-use std::{io::Result, os::unix::io::OwnedFd, path::Path, time::SystemTime};
+use std::{
+    fmt::{self, Debug, Formatter},
+    io::Result,
+    os::unix::io::{AsRawFd, OwnedFd},
+    path::{Path, PathBuf},
+};
 
-#[derive(Debug)]
 pub struct File {
     pub(crate) fd: OwnedFd,
 }
@@ -46,6 +51,8 @@ impl File {
 
     /// This function is similar to [`sync_all`], except that it might not
     /// synchronize file metadata to the filesystem.
+    ///
+    /// [`sync_all`]: File::sync_all
     pub fn sync_data(&self) -> Result<()> {
         unimplemented!()
     }
@@ -86,5 +93,41 @@ impl File {
     #[inline]
     pub fn set_modified(&self, time: SystemTime) -> Result<()> {
         self.set_times(FileTimes::new().set_modified(time))
+    }
+}
+
+impl Debug for File {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn get_path(fd: libc::c_int) -> Option<PathBuf> {
+            let mut p = PathBuf::from("/proc/self/fd");
+            p.push(&fd.to_string());
+            read_link(&p).ok()
+        }
+
+        fn get_mode(fd: libc::c_int) -> Option<(bool, bool)> {
+            let mode = unsafe {
+                encapsulation::fcntl_with_two_args(fd, libc::F_GETFL)
+            };
+            if mode.is_err() {
+                return None;
+            }
+            match mode.unwrap() & libc::O_ACCMODE {
+                libc::O_RDONLY => Some((true, false)),
+                libc::O_RDWR => Some((true, true)),
+                libc::O_WRONLY => Some((false, true)),
+                _ => None,
+            }
+        }
+
+        let fd = self.fd.as_raw_fd();
+        let mut b = f.debug_struct("File");
+        b.field("fd", &fd);
+        if let Some(path) = get_path(fd) {
+            b.field("path", &path);
+        }
+        if let Some((read, write)) = get_mode(fd) {
+            b.field("read", &read).field("write", &write);
+        }
+        b.finish()
     }
 }

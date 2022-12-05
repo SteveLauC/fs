@@ -10,14 +10,14 @@
 //! `Ok(the_num_of_bytes_read)` on success, `Err(errno_value)` on error.
 
 use libc::{
-    blkcnt64_t, blksize_t, c_char, c_int, c_uint, c_void, dev_t, gid_t,
+    blkcnt64_t, blksize_t, c_char, c_int, c_long, c_uint, c_void, dev_t, gid_t,
     ino64_t, mode_t, nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT,
     O_RDONLY, O_TRUNC,
 };
 use sc::{
     nr::{
-        CHROOT, CLOSE, FSTAT, GETDENTS64, LINK, LSEEK, LSTAT, MKDIR, OPEN,
-        RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
+        CHROOT, CLOSE, FCNTL, FSTAT, GETDENTS64, LINK, LSEEK, LSTAT, MKDIR,
+        OPEN, RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
     },
     syscall,
 };
@@ -231,7 +231,7 @@ pub(crate) fn lstat(
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub(crate) struct Statx {
     pub(crate) stx_mask: u32,
     pub(crate) stx_blksize: u32,
@@ -320,11 +320,32 @@ pub(crate) fn lseek64(
     syscall_result(res).map(|new_offset| new_offset as u64)
 }
 
+pub(crate) fn readlink(
+    pathname: *const c_char,
+    buf: *mut c_char,
+    bufsiz: size_t,
+) -> Result<u64, c_int> {
+    let res =
+        unsafe { syscall!(READLINK, pathname as usize, buf as usize, bufsiz) };
+
+    syscall_result(res).map(|bytes_read| bytes_read as u64)
+}
+
+/// A simplified version of `fcntl(2)`, supports only two arguments
+pub(crate) fn fcntl_with_two_args(
+    fd: c_int,
+    cmd: c_int,
+) -> Result<c_int, c_int> {
+    let res = unsafe { syscall!(FCNTL, fd as usize, cmd as usize) };
+
+    syscall_result(res).map(|res| res as c_int)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use libc::{
-        EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL,
+        BUFSIZ, EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL,
         S_IFLNK, S_IFMT, S_IFREG,
     };
 
@@ -612,5 +633,30 @@ mod test {
 
         close(fd).unwrap();
         unlink(file.as_ptr() as *const c_char).unwrap();
+    }
+
+    #[test]
+    fn test_readlink() {
+        let file = "/tmp/test_readlink\0";
+        let soft_link = "/tmp/test_readlink_link\0";
+        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
+        symlink(
+            file.as_ptr() as *const c_char,
+            soft_link.as_ptr() as *const c_char,
+        )
+        .unwrap();
+
+        let buf = [0; 19];
+        let bytes_read = readlink(
+            soft_link.as_ptr().cast(),
+            buf.as_ptr().cast_mut().cast(),
+            20,
+        )
+        .unwrap();
+
+        assert_eq!(buf, file.as_bytes());
+
+        unlink(file.as_ptr().cast()).unwrap();
+        unlink(soft_link.as_ptr().cast()).unwrap();
     }
 }

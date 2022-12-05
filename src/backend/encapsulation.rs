@@ -10,7 +10,7 @@ use std::{
     ffi::{CStr, CString, OsStr, OsString},
     io::{Error, Result},
     os::unix::{
-        ffi::OsStrExt,
+        ffi::{OsStrExt, OsStringExt},
         io::{AsFd, AsRawFd, FromRawFd, OwnedFd},
     },
     path::{Path, PathBuf},
@@ -291,6 +291,12 @@ impl Stat {
         self.0.st_nlink
     }
 
+    /// Return a number encoding file type and permission.
+    #[inline]
+    pub(crate) fn mode(&self) -> u32 {
+        self.0.st_mode
+    }
+
     /// Returns a [`FileType`] representing the file type.
     #[inline]
     pub(crate) fn file_type(&self) -> FileType {
@@ -412,6 +418,7 @@ pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<Stat> {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Statx(libc_like_syscall::Statx);
 
 impl From<libc_like_syscall::Statx> for Statx {
@@ -449,6 +456,12 @@ impl Statx {
     #[inline]
     pub(crate) fn gid(&self) -> u32 {
         self.0.stx_gid
+    }
+
+    /// Returns a number encoding file type and permission.
+    #[inline]
+    pub(crate) fn mode(&self) -> u32 {
+        self.0.stx_mode as u32
     }
 
     /// Returns a [`Mode`] representing the file permission.
@@ -600,7 +613,7 @@ struct LinuxDirent64 {
     // We don't have this in Rust.
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum FileType {
     RegularFile,
     Directory,
@@ -767,6 +780,31 @@ pub(crate) fn lseek64<Fd: AsFd>(
     libc_like_syscall::lseek64(raw_fd, offset, whence)
         .map_err(Error::from_raw_os_error)
 }
+
+/// Read value of a symbolic link
+pub(crate) fn readlink<P: AsRef<Path>>(pathname: P) -> Result<PathBuf> {
+    let pathname =
+        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    let mut buf: Vec<u8> = Vec::with_capacity(libc::PATH_MAX as usize);
+
+    let bytes_read = libc_like_syscall::readlink(
+        pathname.as_ptr(),
+        buf.as_mut_ptr().cast(),
+        libc::PATH_MAX as _,
+    )
+    .map_err(Error::from_raw_os_error)?;
+
+    unsafe {
+        buf.set_len(bytes_read as usize);
+    }
+
+    Ok(PathBuf::from(OsString::from_vec(buf)))
+}
+
+/// A simplified version of `fcntl(2)`, supports only two arguments
+// Currently, this will be only used in the `Debug` implementation for `File`,
+// so this simple wrapper would suffice.
+pub(crate) use libc_like_syscall::fcntl_with_two_args;
 
 #[cfg(test)]
 mod test {
@@ -997,5 +1035,19 @@ mod test {
         assert_eq!(lseek64(fd.as_fd(), 0, Whence::SeekSet).unwrap(), 0);
 
         unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_readlink() {
+        let file = "/tmp/test_readlink";
+        let link = "/tmp/test_readlink_link";
+        creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+        symlink(file, link).unwrap();
+        let link_contents = readlink(link).unwrap();
+
+        assert_eq!(Path::new(file), link_contents.as_path());
+
+        unlink(file).unwrap();
+        unlink(link).unwrap();
     }
 }
