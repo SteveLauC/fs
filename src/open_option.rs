@@ -1,3 +1,9 @@
+// Progress:
+//
+// * Implementation: Done
+// * Tests:
+//   To finish tests, you need to implement `Read/Write` on `File` first.
+
 use crate::{
     backend::encapsulation::{open, Flags, Mode},
     file::File,
@@ -8,7 +14,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Default, Debug)]
+#[derive(Debug, Clone)]
 pub struct OpenOptions {
     // generic
     // access flags
@@ -94,6 +100,7 @@ impl OpenOptions {
             (_, _, true) => libc::O_CREAT | libc::O_EXCL,
         })
     }
+
     pub fn new() -> Self {
         OpenOptions {
             // generic
@@ -183,6 +190,23 @@ mod test {
         let my_fs_error = OpenOptions::new()
             .read(true)
             .open("dOeSnOtExIst")
+            .unwrap_err()
+            .kind();
+
+        assert_eq!(std_error, my_fs_error);
+    }
+
+    #[test]
+    fn try_to_write_to_home_dir() {
+        let std_error = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/home")
+            .unwrap_err()
+            .kind();
+
+        let my_fs_error = OpenOptions::new()
+            .write(true)
+            .open("/home")
             .unwrap_err()
             .kind();
 

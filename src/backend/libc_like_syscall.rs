@@ -10,9 +10,9 @@
 //! `Ok(the_num_of_bytes_read)` on success, `Err(errno_value)` on error.
 
 use libc::{
-    blkcnt64_t, blksize_t, c_char, c_int, c_void, dev_t, gid_t, ino64_t,
-    mode_t, nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT, O_RDONLY,
-    O_TRUNC,
+    blkcnt64_t, blksize_t, c_char, c_int, c_uint, c_void, dev_t, gid_t,
+    ino64_t, mode_t, nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT,
+    O_RDONLY, O_TRUNC,
 };
 use sc::{
     nr::{
@@ -230,6 +230,63 @@ pub(crate) fn lstat(
     syscall_result(res).map(drop)
 }
 
+#[repr(C)]
+#[derive(Default, Debug)]
+pub(crate) struct Statx {
+    pub(crate) stx_mask: u32,
+    pub(crate) stx_blksize: u32,
+    pub(crate) stx_attributes: u64,
+    pub(crate) stx_nlink: u32,
+    pub(crate) stx_uid: u32,
+    pub(crate) stx_gid: u32,
+    pub(crate) stx_mode: u16,
+    __statx_pad1: [u16; 1],
+    pub(crate) stx_ino: u64,
+    pub(crate) stx_size: u64,
+    pub(crate) stx_blocks: u64,
+    pub(crate) stx_attributes_mask: u64,
+    pub(crate) stx_atime: StatxTimestamp,
+    pub(crate) stx_btime: StatxTimestamp,
+    pub(crate) stx_ctime: StatxTimestamp,
+    pub(crate) stx_mtime: StatxTimestamp,
+    pub(crate) stx_rdev_major: u32,
+    pub(crate) stx_rdev_minor: u32,
+    pub(crate) stx_dev_major: u32,
+    pub(crate) stx_dev_minor: u32,
+    pub(crate) stx_mnt_id: u64,
+    __statx_pad2: u64,
+    __statx_pad3: [u64; 12],
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone)]
+pub(crate) struct StatxTimestamp {
+    pub(crate) tv_sec: i64,
+    pub(crate) tv_nsec: u32,
+    __statx_timestamp_pad1: [i32; 1],
+}
+
+pub(crate) fn statx(
+    dirfd: c_int,
+    pathname: *const c_char,
+    flags: c_int,
+    mask: c_uint,
+    statx_buf: *mut Statx,
+) -> Result<(), c_int> {
+    let res = unsafe {
+        syscall!(
+            STATX,
+            dirfd as usize,
+            pathname as usize,
+            flags as usize,
+            mask as usize,
+            statx_buf as usize
+        )
+    };
+
+    syscall_result(res).map(drop)
+}
+
 #[inline]
 pub(crate) fn getdents64(
     fd: c_int,
@@ -267,8 +324,8 @@ pub(crate) fn lseek64(
 mod test {
     use super::*;
     use libc::{
-        EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, S_IFLNK, S_IFMT,
-        S_IFREG,
+        EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL,
+        S_IFLNK, S_IFMT, S_IFREG,
     };
 
     #[test]
@@ -443,6 +500,25 @@ mod test {
 
         unlink(file.as_ptr() as *const c_char).unwrap();
         unlink(soft_link.as_ptr() as *const c_char).unwrap();
+    }
+
+    #[test]
+    fn test_statx() {
+        let file = "/tmp/test_statx\0";
+        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
+
+        let mut statx_buf = Statx::default();
+        statx(
+            0,
+            file.as_ptr() as *const c_char,
+            0,
+            STATX_ALL,
+            &mut statx_buf as *mut Statx,
+        )
+        .unwrap();
+
+        assert_eq!(statx_buf.stx_mode & S_IFMT as u16, S_IFREG as u16);
+        unlink(file.as_ptr() as *const c_char).unwrap();
     }
 
     #[test]

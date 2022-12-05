@@ -1,6 +1,9 @@
 //! Rusty encapsulation for libc-like syscall.
 
-use super::libc_like_syscall;
+use super::{
+    libc_like_syscall,
+    major_minor::{major, minor},
+};
 use bitflags::bitflags;
 use std::{
     collections::VecDeque,
@@ -17,9 +20,9 @@ bitflags! {
     pub(crate) struct Flags: libc::c_int {
         const O_ACCMODE = libc::O_ACCMODE;
         /// Open the file in append-only mode.
-        const    O_APPEND = libc::O_APPEND;
+        const O_APPEND = libc::O_APPEND;
         /// Generate a signal when input or output becomes possible.
-        const  O_ASYNC = libc::O_ASYNC;
+        const O_ASYNC = libc::O_ASYNC;
         /// Closes the file descriptor once an `execve` call is made.
         ///
         /// Also sets the file offset to the beginning of the file.
@@ -76,7 +79,9 @@ bitflags! {
 }
 
 bitflags! {
-    /// "File mode / permissions" flags.
+    /// "File permissions" flags.
+    ///
+    /// Does NOT encode `File Type`
     pub(crate) struct Mode: libc::mode_t {
         const S_IRWXU=libc::S_IRWXU;
         const S_IRUSR=libc::S_IRUSR;
@@ -191,7 +196,10 @@ pub(crate) fn pwrite<Fd: AsFd>(
 ///
 /// Note: `old_path` and `new_path` should not contain byte 0, or this function
 /// will panic.
-pub(crate) fn link<P: AsRef<Path>>(old_path: P, new_path: P) -> Result<()> {
+pub(crate) fn link<P: AsRef<Path>, Q: AsRef<Path>>(
+    old_path: P,
+    new_path: Q,
+) -> Result<()> {
     let old_path =
         CString::new(old_path.as_ref().as_os_str().as_bytes()).unwrap();
     let new_path =
@@ -261,12 +269,106 @@ pub(crate) fn rename<P: AsRef<Path>>(old_path: P, new_path: P) -> Result<()> {
         .map_err(Error::from_raw_os_error)
 }
 
+pub(crate) struct Stat(libc_like_syscall::Stat);
+
+impl Stat {
+    /// Returns a tuple (major_dev_id, minor_dev_id).
+    #[inline]
+    pub(crate) fn dev(&self) -> (u32, u32) {
+        let dev_number = self.0.st_dev;
+        (major(dev_number), minor(dev_number))
+    }
+
+    /// Returns I-node number
+    #[inline]
+    pub(crate) fn ino(&self) -> libc::ino_t {
+        self.0.st_ino
+    }
+
+    /// Returns the number of hard links.
+    #[inline]
+    pub(crate) fn nlink(&self) -> libc::nlink_t {
+        self.0.st_nlink
+    }
+
+    /// Returns a [`FileType`] representing the file type.
+    #[inline]
+    pub(crate) fn file_type(&self) -> FileType {
+        FileType::from(self.0.st_mode)
+    }
+
+    /// Returns a [`Mode`] representing the file permission.
+    #[inline]
+    pub(crate) fn permission(&self) -> Mode {
+        Mode::from_bits_truncate(self.0.st_mode)
+    }
+
+    /// Returns UID of the file owner.
+    #[inline]
+    pub(crate) fn uid(&self) -> libc::uid_t {
+        self.0.st_uid
+    }
+
+    /// Returns GID of the file owner.
+    #[inline]
+    pub(crate) fn gid(&self) -> libc::gid_t {
+        self.0.st_gid
+    }
+
+    /// Returns a tuple (major_rdev_id, minor_rdev_id).
+    #[inline]
+    pub(crate) fn rdev(&self) -> (u32, u32) {
+        let rdev_number = self.0.st_rdev;
+        (major(rdev_number), minor(rdev_number))
+    }
+
+    /// Returns file size (in bytes).
+    #[inline]
+    pub(crate) fn size(&self) -> libc::off_t {
+        self.0.st_size
+    }
+
+    /// Returns the block size for the file system I/O.
+    #[inline]
+    pub(crate) fn blksize(&self) -> libc::blksize_t {
+        self.0.st_blksize
+    }
+
+    /// Returns the number of 512B blocks allocated.
+    #[inline]
+    pub(crate) fn blocks(&self) -> libc::blkcnt64_t {
+        self.0.st_blocks
+    }
+
+    /// Returns the time of last access.
+    #[inline]
+    pub(crate) fn atime(&self) -> (libc::time_t, i64) {
+        (self.0.st_atime, self.0.st_atime_nsec)
+    }
+
+    /// Returns the time of last modification.
+    #[inline]
+    pub(crate) fn mtime(&self) -> (libc::time_t, i64) {
+        (self.0.st_mtime, self.0.st_mtime_nsec)
+    }
+
+    /// Returns the time of last status (metadata) change.
+    #[inline]
+    pub(crate) fn ctime(&self) -> (libc::time_t, i64) {
+        (self.0.st_ctime, self.0.st_ctime_nsec)
+    }
+}
+
+impl From<libc_like_syscall::Stat> for Stat {
+    fn from(value: libc_like_syscall::Stat) -> Self {
+        Self(value)
+    }
+}
+
 /// Get file status
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
-pub(crate) fn stat<P: AsRef<Path>>(
-    path_name: P,
-) -> Result<libc_like_syscall::Stat> {
+pub(crate) fn stat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
     let path_name =
         CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
     let mut stat_buf = libc_like_syscall::Stat::default();
@@ -275,7 +377,7 @@ pub(crate) fn stat<P: AsRef<Path>>(
         path_name.as_ptr(),
         &mut stat_buf as *mut libc_like_syscall::Stat,
     ) {
-        Ok(()) => Ok(stat_buf),
+        Ok(()) => Ok(Stat::from(stat_buf)),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
     }
 }
@@ -283,9 +385,7 @@ pub(crate) fn stat<P: AsRef<Path>>(
 /// Get file status
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
-pub(crate) fn lstat<P: AsRef<Path>>(
-    path_name: P,
-) -> Result<libc_like_syscall::Stat> {
+pub(crate) fn lstat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
     let path_name =
         CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
     let mut stat_buf = libc_like_syscall::Stat::default();
@@ -294,20 +394,183 @@ pub(crate) fn lstat<P: AsRef<Path>>(
         path_name.as_ptr(),
         &mut stat_buf as *mut libc_like_syscall::Stat,
     ) {
-        Ok(()) => Ok(stat_buf),
+        Ok(()) => Ok(Stat::from(stat_buf)),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
     }
 }
 
 /// Get file status
-pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<libc_like_syscall::Stat> {
+pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<Stat> {
     let mut stat_buf = libc_like_syscall::Stat::default();
 
     match libc_like_syscall::fstat(
         fd.as_fd().as_raw_fd(),
         &mut stat_buf as *mut libc_like_syscall::Stat,
     ) {
-        Ok(()) => Ok(stat_buf),
+        Ok(()) => Ok(Stat::from(stat_buf)),
+        Err(errno) => Err(Error::from_raw_os_error(errno)),
+    }
+}
+
+pub(crate) struct Statx(libc_like_syscall::Statx);
+
+impl From<libc_like_syscall::Statx> for Statx {
+    fn from(value: libc_like_syscall::Statx) -> Self {
+        Self(value)
+    }
+}
+
+impl Statx {
+    /// Returns the block size for the file system I/O.
+    #[inline]
+    pub(crate) fn blksize(&self) -> u32 {
+        self.0.stx_blksize
+    }
+
+    /// Returns extra file attribute indicators.
+    #[inline]
+    pub(crate) fn attributes(&self) -> u64 {
+        self.0.stx_attributes
+    }
+
+    /// Returns the number of hard links.
+    #[inline]
+    pub(crate) fn nlink(&self) -> u32 {
+        self.0.stx_nlink
+    }
+
+    /// Returns UID of the file owner.
+    #[inline]
+    pub(crate) fn uid(&self) -> u32 {
+        self.0.stx_uid
+    }
+
+    /// Returns GID of the file owner.
+    #[inline]
+    pub(crate) fn gid(&self) -> u32 {
+        self.0.stx_gid
+    }
+
+    /// Returns a [`Mode`] representing the file permission.
+    #[inline]
+    pub(crate) fn permission(&self) -> Mode {
+        Mode::from_bits_truncate(self.0.stx_mode as libc::mode_t)
+    }
+
+    /// Returns a [`FileType`] representing the file type.
+    #[inline]
+    pub(crate) fn file_type(&self) -> FileType {
+        FileType::from(self.0.stx_mode as libc::mode_t)
+    }
+
+    /// Returns I-node number
+    #[inline]
+    pub(crate) fn ino(&self) -> u64 {
+        self.0.stx_ino
+    }
+
+    /// Returns file size (in bytes).
+    #[inline]
+    pub(crate) fn size(&self) -> u64 {
+        self.0.stx_size
+    }
+
+    /// Returns the number of blocks allocated for this file.
+    #[inline]
+    pub(crate) fn blocks(&self) -> u64 {
+        self.0.stx_blocks
+    }
+
+    /// Returns the time of last access.
+    #[inline]
+    pub(crate) fn atime(&self) -> (i64, u32) {
+        let atime = self.0.stx_atime;
+        (atime.tv_sec, atime.tv_nsec)
+    }
+
+    /// Returns the time of creation.
+    #[inline]
+    pub(crate) fn btime(&self) -> (i64, u32) {
+        let btime = self.0.stx_btime;
+        (btime.tv_sec, btime.tv_nsec)
+    }
+
+    /// Returns the time of last status (metadata) change.
+    #[inline]
+    pub(crate) fn ctime(&self) -> (i64, u32) {
+        let ctime = self.0.stx_ctime;
+        (ctime.tv_sec, ctime.tv_nsec)
+    }
+
+    /// Returns the time of last modification.
+    #[inline]
+    pub(crate) fn mtime(&self) -> (i64, u32) {
+        let mtime = self.0.stx_mtime;
+        (mtime.tv_sec, mtime.tv_nsec)
+    }
+
+    /// Returns a tuple (major_rdev_id, minor_rdev_id).
+    #[inline]
+    pub(crate) fn rdev(&self) -> (u32, u32) {
+        (self.0.stx_rdev_major, self.0.stx_rdev_minor)
+    }
+
+    /// Returns a tuple (major_dev_id, minor_dev_id).
+    #[inline]
+    pub(crate) fn dev(&self) -> (u32, u32) {
+        (self.0.stx_dev_major, self.0.stx_dev_minor)
+    }
+
+    /// Returns mount id.
+    #[inline]
+    pub(crate) fn mnt_id(&self) -> u64 {
+        self.0.stx_mnt_id
+    }
+}
+
+pub(crate) fn statx<P: AsRef<Path>>(path: P) -> Result<Statx> {
+    let pathname = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+    let mut statx_buf = libc_like_syscall::Statx::default();
+
+    match libc_like_syscall::statx(
+        libc::AT_FDCWD,
+        pathname.as_ptr(),
+        0,
+        0,
+        &mut statx_buf as *mut libc_like_syscall::Statx,
+    ) {
+        Ok(()) => Ok(Statx::from(statx_buf)),
+        Err(errno) => Err(Error::from_raw_os_error(errno)),
+    }
+}
+
+pub(crate) fn lstatx<P: AsRef<Path>>(path: P) -> Result<Statx> {
+    let pathname = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+    let mut statx_buf = libc_like_syscall::Statx::default();
+
+    match libc_like_syscall::statx(
+        libc::AT_FDCWD,
+        pathname.as_ptr(),
+        libc::AT_SYMLINK_NOFOLLOW,
+        0,
+        &mut statx_buf as *mut libc_like_syscall::Statx,
+    ) {
+        Ok(()) => Ok(Statx::from(statx_buf)),
+        Err(errno) => Err(Error::from_raw_os_error(errno)),
+    }
+}
+
+pub(crate) fn fstatx<Fd: AsFd>(fd: Fd) -> Result<Statx> {
+    let mut statx_buf = libc_like_syscall::Statx::default();
+
+    match libc_like_syscall::statx(
+        fd.as_fd().as_raw_fd(),
+        "\0".as_ptr().cast(),
+        libc::AT_EMPTY_PATH,
+        0,
+        &mut statx_buf as *mut libc_like_syscall::Statx,
+    ) {
+        Ok(()) => Ok(Statx::from(statx_buf)),
         Err(errno) => Err(Error::from_raw_os_error(errno)),
     }
 }
@@ -337,7 +600,7 @@ struct LinuxDirent64 {
     // We don't have this in Rust.
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum FileType {
     RegularFile,
     Directory,
@@ -368,6 +631,23 @@ impl From<libc::c_uchar> for FileType {
     }
 }
 
+impl From<libc::mode_t> for FileType {
+    fn from(value: libc::mode_t) -> Self {
+        match value & libc::S_IFMT {
+            libc::S_IFDIR => FileType::Directory,
+            libc::S_IFCHR => FileType::CharDev,
+            libc::S_IFBLK => FileType::BlkDev,
+            libc::S_IFREG => FileType::RegularFile,
+            libc::S_IFIFO => FileType::Fifo,
+            libc::S_IFLNK => FileType::Symlink,
+            libc::S_IFSOCK => FileType::Socket,
+            _ => unreachable!(
+                "Linux supports only 7 file types, this should not happen"
+            ),
+        }
+    }
+}
+
 /// Offset of field `d_name` in `struct linux_dirent64`
 ///
 /// I am not sure about if this offset value is correct, it just works.
@@ -383,7 +663,7 @@ pub(crate) struct Dir {
 }
 
 #[derive(Debug)]
-pub struct Dirent {
+pub(crate) struct Dirent {
     pub(crate) ino: u64,
     pub(crate) file_type: FileType,
     pub(crate) name: OsString,
@@ -468,20 +748,11 @@ pub(crate) fn chroot<P: AsRef<Path>>(path: P) -> Result<()> {
 }
 
 /// `whence` argument of `lseek64(2)`
+#[repr(i32)]
 pub(crate) enum Whence {
-    SeekSet,
-    SeekCur,
-    SeekEnd,
-}
-
-impl Whence {
-    fn bits(&self) -> libc::c_int {
-        match self {
-            Whence::SeekSet => libc::SEEK_SET,
-            Whence::SeekCur => libc::SEEK_CUR,
-            Whence::SeekEnd => libc::SEEK_END,
-        }
-    }
+    SeekSet = libc::SEEK_SET,
+    SeekCur = libc::SEEK_CUR,
+    SeekEnd = libc::SEEK_END,
 }
 
 /// reposition read/write file offset
@@ -491,7 +762,7 @@ pub(crate) fn lseek64<Fd: AsFd>(
     whence: Whence,
 ) -> Result<u64> {
     let raw_fd = fd.as_fd().as_raw_fd();
-    let whence = whence.bits();
+    let whence = whence as libc::c_int;
 
     libc_like_syscall::lseek64(raw_fd, offset, whence)
         .map_err(Error::from_raw_os_error)
@@ -618,7 +889,7 @@ mod test {
 
         let stat_buf = stat(file).unwrap();
 
-        assert_eq!(stat_buf.st_mode & libc::S_IFMT, libc::S_IFREG);
+        assert_eq!(stat_buf.file_type(), FileType::RegularFile);
         unlink(file).unwrap();
     }
 
@@ -629,7 +900,7 @@ mod test {
 
         let stat_buf = fstat(fd.as_fd()).unwrap();
 
-        assert_eq!(stat_buf.st_mode & libc::S_IFMT, libc::S_IFREG);
+        assert_eq!(stat_buf.file_type(), FileType::RegularFile);
         unlink(file).unwrap();
     }
 
@@ -642,10 +913,45 @@ mod test {
 
         let stat_buf = lstat(soft_link).unwrap();
 
-        assert_eq!(stat_buf.st_mode & libc::S_IFMT, libc::S_IFLNK);
+        assert_eq!(stat_buf.file_type(), FileType::Symlink);
 
         unlink(file).unwrap();
         unlink(soft_link).unwrap();
+    }
+
+    #[test]
+    fn test_statx() {
+        let file = "/tmp/test_statx";
+        creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+
+        let statx_buf = statx(file).unwrap();
+
+        assert_eq!(statx_buf.file_type(), FileType::RegularFile);
+        unlink(file).unwrap();
+    }
+    #[test]
+    fn test_lstatx() {
+        let file = "/tmp/test_lstatx";
+        let soft_link = "/tmp/test_lstatx_link";
+        creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+        symlink(file, soft_link).unwrap();
+
+        let statx_buf = lstatx(soft_link).unwrap();
+
+        assert_eq!(statx_buf.file_type(), FileType::Symlink);
+
+        unlink(file).unwrap();
+        unlink(soft_link).unwrap();
+    }
+    #[test]
+    fn test_fstatx() {
+        let file = "/tmp/test_fstatx";
+        let fd = creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+
+        let statx_buf = fstatx(fd.as_fd()).unwrap();
+
+        assert_eq!(statx_buf.file_type(), FileType::RegularFile);
+        unlink(file).unwrap();
     }
 
     #[test]
