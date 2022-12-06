@@ -70,8 +70,7 @@ pub(crate) fn read(
     buf: *mut c_void,
     count: size_t,
 ) -> Result<usize, c_int> {
-    let res =
-        unsafe { syscall!(READ, fd as usize, buf as usize, count ) };
+    let res = unsafe { syscall!(READ, fd as usize, buf as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -82,8 +81,7 @@ pub(crate) fn write(
     buf: *const c_void,
     count: size_t,
 ) -> Result<usize, c_int> {
-    let res =
-        unsafe { syscall!(WRITE, fd as usize, buf as usize, count) };
+    let res = unsafe { syscall!(WRITE, fd as usize, buf as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -110,13 +108,7 @@ pub(crate) fn pwrite(
     offset: off_t,
 ) -> Result<usize, c_int> {
     let res = unsafe {
-        syscall!(
-            PWRITE64,
-            fd as usize,
-            buf as usize,
-            count,
-            offset as usize
-        )
+        syscall!(PWRITE64, fd as usize, buf as usize, count, offset as usize)
     };
 
     syscall_result(res).map(|num_written| num_written as usize)
