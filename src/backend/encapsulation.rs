@@ -1,14 +1,17 @@
+#![allow(unused)]
+
 //! Rusty encapsulation for libc-like syscall.
 
 use super::{
     libc_like_syscall,
     major_minor::{major, minor},
 };
+use crate::non_fs::SystemTime;
 use bitflags::bitflags;
 use std::{
     collections::VecDeque,
     ffi::{CStr, CString, OsStr, OsString},
-    io::{Error, Result},
+    io::{Error, ErrorKind, Result},
     os::unix::{
         ffi::{OsStrExt, OsStringExt},
         io::{AsFd, AsRawFd, FromRawFd, OwnedFd},
@@ -133,7 +136,7 @@ pub(crate) fn creat<P: AsRef<Path>>(path: P, mode: Mode) -> Result<OwnedFd> {
 }
 
 /// Reads from a stream
-pub(crate) fn read<Fd: AsFd>(fd: Fd, buf: &mut [u8]) -> Result<usize> {
+pub(crate) fn read<Fd: AsFd>(fd: &Fd, buf: &mut [u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
     libc_like_syscall::read(
@@ -145,7 +148,7 @@ pub(crate) fn read<Fd: AsFd>(fd: Fd, buf: &mut [u8]) -> Result<usize> {
 }
 
 /// Writes to a stream
-pub(crate) fn write<Fd: AsFd>(fd: Fd, buf: &[u8]) -> Result<usize> {
+pub(crate) fn write<Fd: AsFd>(fd: &Fd, buf: &[u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
     libc_like_syscall::write(
@@ -158,7 +161,7 @@ pub(crate) fn write<Fd: AsFd>(fd: Fd, buf: &[u8]) -> Result<usize> {
 
 /// Read from a file at the given offset
 pub(crate) fn pread<Fd: AsFd>(
-    fd: Fd,
+    fd: &Fd,
     buf: &mut [u8],
     offset: u64,
 ) -> Result<usize> {
@@ -176,7 +179,7 @@ pub(crate) fn pread<Fd: AsFd>(
 
 /// Write to a file at the given offset
 pub(crate) fn pwrite<Fd: AsFd>(
-    fd: Fd,
+    fd: &Fd,
     buf: &[u8],
     offset: u64,
 ) -> Result<usize> {
@@ -406,7 +409,7 @@ pub(crate) fn lstat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
 }
 
 /// Get file status
-pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<Stat> {
+pub(crate) fn fstat<Fd: AsFd>(fd: &Fd) -> Result<Stat> {
     let mut stat_buf = libc_like_syscall::Stat::default();
 
     match libc_like_syscall::fstat(
@@ -549,7 +552,7 @@ pub(crate) fn statx<P: AsRef<Path>>(path: P) -> Result<Statx> {
         libc::AT_FDCWD,
         pathname.as_ptr(),
         0,
-        0,
+        libc::STATX_ALL,
         &mut statx_buf as *mut libc_like_syscall::Statx,
     ) {
         Ok(()) => Ok(Statx::from(statx_buf)),
@@ -565,7 +568,7 @@ pub(crate) fn lstatx<P: AsRef<Path>>(path: P) -> Result<Statx> {
         libc::AT_FDCWD,
         pathname.as_ptr(),
         libc::AT_SYMLINK_NOFOLLOW,
-        0,
+        libc::STATX_ALL,
         &mut statx_buf as *mut libc_like_syscall::Statx,
     ) {
         Ok(()) => Ok(Statx::from(statx_buf)),
@@ -573,14 +576,14 @@ pub(crate) fn lstatx<P: AsRef<Path>>(path: P) -> Result<Statx> {
     }
 }
 
-pub(crate) fn fstatx<Fd: AsFd>(fd: Fd) -> Result<Statx> {
+pub(crate) fn fstatx<Fd: AsFd>(fd: &Fd) -> Result<Statx> {
     let mut statx_buf = libc_like_syscall::Statx::default();
 
     match libc_like_syscall::statx(
         fd.as_fd().as_raw_fd(),
         "\0".as_ptr().cast(),
         libc::AT_EMPTY_PATH,
-        0,
+        libc::STATX_ALL,
         &mut statx_buf as *mut libc_like_syscall::Statx,
     ) {
         Ok(()) => Ok(Statx::from(statx_buf)),
@@ -589,7 +592,7 @@ pub(crate) fn fstatx<Fd: AsFd>(fd: Fd) -> Result<Statx> {
 }
 
 /// Gets directory entries
-pub(crate) fn getdents64<Fd: AsFd>(fd: Fd, dirp: &mut [u8]) -> Result<usize> {
+pub(crate) fn getdents64<Fd: AsFd>(fd: &Fd, dirp: &mut [u8]) -> Result<usize> {
     libc_like_syscall::getdents64(
         fd.as_fd().as_raw_fd(),
         dirp.as_mut_ptr() as *mut libc::c_void,
@@ -697,7 +700,7 @@ impl Dirent {
         let path = root.join(name.as_os_str());
 
         Self {
-            ino: ino as u64,
+            ino,
             file_type: FileType::from(file_type),
             name,
             path,
@@ -722,7 +725,7 @@ impl Dir {
 
     pub(crate) fn readdir(&mut self) -> Result<Option<Dirent>> {
         if self.entries.is_empty() {
-            let num_read = getdents64(self.fd.as_fd(), &mut self.buf)?;
+            let num_read = getdents64(&self.fd.as_fd(), &mut self.buf)?;
 
             if num_read == 0 {
                 return Ok(None);
@@ -763,14 +766,14 @@ pub(crate) fn chroot<P: AsRef<Path>>(path: P) -> Result<()> {
 /// `whence` argument of `lseek64(2)`
 #[repr(i32)]
 pub(crate) enum Whence {
-    SeekSet = libc::SEEK_SET,
-    SeekCur = libc::SEEK_CUR,
-    SeekEnd = libc::SEEK_END,
+    Set = libc::SEEK_SET,
+    Cur = libc::SEEK_CUR,
+    End = libc::SEEK_END,
 }
 
 /// reposition read/write file offset
 pub(crate) fn lseek64<Fd: AsFd>(
-    fd: Fd,
+    fd: &Fd,
     offset: i64,
     whence: Whence,
 ) -> Result<u64> {
@@ -806,9 +809,99 @@ pub(crate) fn readlink<P: AsRef<Path>>(pathname: P) -> Result<PathBuf> {
 // so this simple wrapper would suffice.
 pub(crate) use libc_like_syscall::fcntl_with_two_args;
 
+/// Transfers  ("flushes") all modified in-core data of (i.e., modified buffer
+/// cache pages for) the file referred to by the file descriptor fd to the
+/// disk device
+pub(crate) fn fsync<Fd: AsFd>(fd: &Fd) -> Result<()> {
+    libc_like_syscall::fsync(fd.as_fd().as_raw_fd())
+        .map_err(Error::from_raw_os_error)
+}
+/// `fdatasync()` is similar to [`fsync()`], but does not flush modified metadata
+/// unless that metadata  is needed in order to allow a subsequent data retrieval
+/// to be correctly handled
+pub(crate) fn fdatasync<Fd: AsFd>(fd: &Fd) -> Result<()> {
+    libc_like_syscall::fdatasync(fd.as_fd().as_raw_fd())
+        .map_err(Error::from_raw_os_error)
+}
+
+/// Truncate a file to a specified length
+///
+/// If the file previously was larger than this size, the extra data is lost.
+/// If the file previously was shorter, it is extended, and the extended part
+/// reads as null bytes ('\0').
+pub(crate) fn ftruncate<Fd: AsFd>(fd: &Fd, length: u64) -> Result<()> {
+    let length = length
+        .try_into()
+        .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
+
+    libc_like_syscall::ftruncate(fd.as_fd().as_raw_fd(), length)
+        .map_err(Error::from_raw_os_error)
+}
+
+/// Changes permissions of a file
+pub(crate) fn chmod<P: AsRef<Path>>(pathname: P, mode: Mode) -> Result<()> {
+    let pathname =
+        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    let mode = mode.bits();
+    libc_like_syscall::chmod(pathname.as_ptr(), mode)
+        .map_err(Error::from_raw_os_error)
+}
+
+/// Changes permissions of a file
+pub(crate) fn fchmod<Fd: AsFd>(fd: &Fd, mode: Mode) -> Result<()> {
+    let mode = mode.bits();
+    libc_like_syscall::fchmod(fd.as_fd().as_raw_fd(), mode)
+        .map_err(Error::from_raw_os_error)
+}
+
+/// Time operation used in [`futimens()`].
+pub(crate) enum TimestampSpec {
+    Omit,
+    SetToNow,
+    Set(SystemTime),
+}
+
+fn alter_timespec_per_timestampspec(
+    timestamp_spec: &TimestampSpec,
+    timespec: &mut libc_like_syscall::Timespec,
+) {
+    match timestamp_spec {
+        TimestampSpec::Omit => timespec.tv_nsec = libc::UTIME_OMIT,
+        TimestampSpec::SetToNow => timespec.tv_nsec = libc::UTIME_NOW,
+        TimestampSpec::Set(real_atime) => {
+            timespec.tv_sec = real_atime.sec;
+            timespec.tv_nsec = real_atime.nsec;
+        }
+    }
+}
+
+/// Changes file timestamps with nanosecond precision
+//
+// This syscall is implemented on the top of `utimensat(2)`, for more information, see
+// https://man7.org/linux/man-pages/man2/utimensat.2.html
+pub(crate) fn futimens<Fd: AsFd>(
+    fd: &Fd,
+    atime: TimestampSpec,
+    mtime: TimestampSpec,
+) -> Result<()> {
+    // atime and mtime
+    let mut times = [libc_like_syscall::Timespec::default(); 2];
+    alter_timespec_per_timestampspec(&atime, &mut times[0]);
+    alter_timespec_per_timestampspec(&mtime, &mut times[1]);
+
+    libc_like_syscall::utimensat(
+        fd.as_fd().as_raw_fd(),
+        std::ptr::null(),
+        &times as *const libc_like_syscall::Timespec,
+        0,
+    )
+    .map_err(Error::from_raw_os_error)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use libc::futimes;
 
     #[test]
     fn test_open() {
@@ -831,13 +924,13 @@ mod test {
         let fd_with_write_permission =
             open(file, Flags::O_WRONLY, Mode::empty()).unwrap();
         assert_eq!(
-            write(fd_with_write_permission.as_fd(), b"hello").unwrap(),
+            write(&fd_with_write_permission.as_fd(), b"hello").unwrap(),
             5
         );
 
         let mut buffer = [0_u8; 5];
         assert_eq!(
-            read(fd_with_read_permission.as_fd(), &mut buffer).unwrap(),
+            read(&fd_with_read_permission.as_fd(), &mut buffer).unwrap(),
             5
         );
         assert_eq!(&buffer, b"hello");
@@ -851,10 +944,10 @@ mod test {
         creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
 
         let fd = open(file, Flags::O_RDWR, Mode::empty()).unwrap();
-        write(fd.as_fd(), b"hello world").unwrap();
+        write(&fd.as_fd(), b"hello world").unwrap();
 
         let mut buf = [0_u8; 5];
-        assert_eq!(pread(fd.as_fd(), &mut buf, 6).unwrap(), 5);
+        assert_eq!(pread(&fd.as_fd(), &mut buf, 6).unwrap(), 5);
 
         assert_eq!(&buf, b"world");
 
@@ -867,12 +960,12 @@ mod test {
         creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
 
         let fd = open(file, Flags::O_RDWR, Mode::empty()).unwrap();
-        write(fd.as_fd(), b"hello world").unwrap();
+        write(&fd.as_fd(), b"hello world").unwrap();
 
-        assert_eq!(pwrite(fd.as_fd(), b"steve", 6).unwrap(), 5);
+        assert_eq!(pwrite(&fd.as_fd(), b"steve", 6).unwrap(), 5);
 
         let mut buf = [0_u8; 11];
-        assert_eq!(pread(fd.as_fd(), &mut buf, 0).unwrap(), 11);
+        assert_eq!(pread(&fd.as_fd(), &mut buf, 0).unwrap(), 11);
 
         assert_eq!(&buf, b"hello steve");
         unlink(file).unwrap();
@@ -936,7 +1029,7 @@ mod test {
         let file = "/tmp/test_fstat";
         let fd = creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
 
-        let stat_buf = fstat(fd.as_fd()).unwrap();
+        let stat_buf = fstat(&fd.as_fd()).unwrap();
 
         assert_eq!(stat_buf.file_type(), FileType::RegularFile);
         unlink(file).unwrap();
@@ -986,7 +1079,7 @@ mod test {
         let file = "/tmp/test_fstatx";
         let fd = creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
 
-        let statx_buf = fstatx(fd.as_fd()).unwrap();
+        let statx_buf = fstatx(&fd.as_fd()).unwrap();
 
         assert_eq!(statx_buf.file_type(), FileType::RegularFile);
         unlink(file).unwrap();
@@ -997,7 +1090,7 @@ mod test {
         let tmp_dir = "/tmp";
         let tmp_dir_fd = open(tmp_dir, Flags::O_RDONLY, Mode::empty()).unwrap();
         let mut buf = [0_u8; 100];
-        getdents64(tmp_dir_fd.as_fd(), &mut buf).unwrap();
+        getdents64(&tmp_dir_fd.as_fd(), &mut buf).unwrap();
     }
 
     #[test]
@@ -1030,9 +1123,9 @@ mod test {
         let file = "/tmp/test_lseek64";
         creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
         let fd = open(file, Flags::O_RDWR, Mode::empty()).unwrap();
-        write(fd.as_fd(), b"hello").unwrap();
+        write(&fd.as_fd(), b"hello").unwrap();
 
-        assert_eq!(lseek64(fd.as_fd(), 0, Whence::SeekSet).unwrap(), 0);
+        assert_eq!(lseek64(&fd.as_fd(), 0, Whence::Set).unwrap(), 0);
 
         unlink(file).unwrap();
     }
@@ -1049,5 +1142,159 @@ mod test {
 
         unlink(file).unwrap();
         unlink(link).unwrap();
+    }
+
+    #[test]
+    fn test_fsync() {
+        let file = "/tmp/test_fsync";
+        let fd = creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+        fsync(&fd.as_fd()).unwrap();
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_fdatasync() {
+        let file = "/tmp/test_fdatasync";
+        let fd = creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+        fdatasync(&fd.as_fd()).unwrap();
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_ftruncate() {
+        let file = "/tmp/ftruncate";
+        let fd = open(
+            file,
+            Flags::O_RDWR | Flags::O_CREAT,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(5, write(&fd.as_fd(), b"hello").unwrap());
+
+        ftruncate(&fd.as_fd(), 3).unwrap();
+
+        let stat = fstat(&fd.as_fd()).unwrap();
+        assert_eq!(stat.size(), 3);
+
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_ftruncate_with_too_large_length() {
+        let file = "/tmp/ftruncate_with_too_large_length";
+        let fd = open(
+            file,
+            Flags::O_RDWR | Flags::O_CREAT,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            ErrorKind::InvalidInput,
+            ftruncate(&fd.as_fd(), u64::MAX).unwrap_err().kind()
+        );
+
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_chmod() {
+        let file = "/tmp/test_chmod_encap";
+        open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+        let target_mode = unsafe { Mode::from_bits_unchecked(0o000) };
+
+        chmod(file, target_mode).unwrap();
+
+        let statx = statx(file).unwrap();
+
+        assert_eq!(statx.permission(), target_mode);
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_fchmod() {
+        let file = "/tmp/test_fchmod_encap";
+        let fd = open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        let target_mode = unsafe { Mode::from_bits_unchecked(0o000) };
+
+        fchmod(&fd.as_fd(), target_mode).unwrap();
+
+        let statx = fstatx(&fd.as_fd()).unwrap();
+
+        assert_eq!(statx.permission(), target_mode);
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_futimens_omit() {
+        let file = "/tmp/test_futimens_omit_encap";
+        let fd = open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        futimens(&fd.as_fd(), TimestampSpec::Omit, TimestampSpec::Omit)
+            .unwrap();
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_futimens_set_now() {
+        let file = "/tmp/test_futimens_set_now_encap";
+        let fd = open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        futimens(
+            &fd.as_fd(),
+            TimestampSpec::SetToNow,
+            TimestampSpec::SetToNow,
+        )
+        .unwrap();
+        unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_futimens_set_to_a_specific_value() {
+        let file = "/tmp/test_futimens_set_to_a_specific_value_encap";
+        let fd = open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        let atime = SystemTime::new(0, 1);
+        let mtime = SystemTime::new(1, 0);
+        futimens(
+            &fd.as_fd(),
+            TimestampSpec::Set(atime),
+            TimestampSpec::Set(mtime),
+        )
+        .unwrap();
+
+        let statx = fstatx(&fd.as_fd()).unwrap();
+
+        assert_eq!(statx.atime(), (0, 1));
+        assert_eq!(statx.mtime(), (1, 0));
+
+        unlink(file).unwrap();
     }
 }

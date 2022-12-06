@@ -1,8 +1,10 @@
-use crate::backend::encapsulation;
+use crate::backend::encapsulation::TimestampSpec;
 use crate::{
-    filetimes::FileTimes, functions::read_link, metadata::Metadata,
-    non_fs::SystemTime, open_option::OpenOptions, permissions::Permissions,
+    backend::encapsulation, filetimes::FileTimes, functions::read_link,
+    metadata::Metadata, non_fs::SystemTime, open_option::OpenOptions,
+    permissions::Permissions,
 };
+use std::os::fd::AsFd;
 use std::{
     fmt::{self, Debug, Formatter},
     io::Result,
@@ -16,6 +18,7 @@ pub struct File {
 
 impl File {
     /// Attempts to open a file in read-only mode.
+    #[inline]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<File> {
         OpenOptions::new().read(true).open(path.as_ref())
     }
@@ -45,27 +48,32 @@ impl File {
     }
 
     /// Attempts to sync all OS-internal metadata to disk.
+    #[inline]
     pub fn sync_all(&self) -> Result<()> {
-        unimplemented!()
+        encapsulation::fsync(&self.fd.as_fd())
     }
 
     /// This function is similar to [`sync_all`], except that it might not
     /// synchronize file metadata to the filesystem.
     ///
     /// [`sync_all`]: File::sync_all
+    #[inline]
     pub fn sync_data(&self) -> Result<()> {
-        unimplemented!()
+        encapsulation::fdatasync(&self.fd.as_fd())
     }
 
     /// Truncates or extends the underlying file, updating the size of
     /// this file to become `size`.
+    #[inline]
     pub fn set_len(&self, size: u64) -> Result<()> {
-        unimplemented!()
+        encapsulation::ftruncate(&self.fd.as_fd(), size)
     }
 
     /// Queries metadata about the underlying file.
+    #[inline]
     pub fn metadata(&self) -> Result<Metadata> {
-        unimplemented!()
+        let statx = encapsulation::fstatx(&self.fd.as_fd())?;
+        Ok(Metadata(statx))
     }
 
     /// Creates a new `File` instance that shares the same underlying file handle
@@ -73,18 +81,27 @@ impl File {
     /// both `File` instances simultaneously.
     //
     // Duplicate the underlying file descriptor
+    #[inline]
     pub fn try_clone(&self) -> Result<File> {
-        unimplemented!()
+        Ok(File {
+            fd: self.fd.try_clone()?,
+        })
     }
 
     /// Changes the permissions on the underlying file.
+    #[inline]
     pub fn set_permissions(&self, perm: Permissions) -> Result<()> {
-        unimplemented!()
+        encapsulation::fchmod(&self.fd.as_fd(), perm.0)
     }
 
     /// Changes the timestamps of the underlying file.
+    #[inline]
     pub fn set_times(&self, times: FileTimes) -> Result<()> {
-        unimplemented!()
+        encapsulation::futimens(
+            &self.fd.as_fd(),
+            TimestampSpec::Set(times.0[0]),
+            TimestampSpec::Set(times.0[1]),
+        )
     }
 
     /// Changes the modification time of the underlying file.
@@ -105,9 +122,7 @@ impl Debug for File {
         }
 
         fn get_mode(fd: libc::c_int) -> Option<(bool, bool)> {
-            let mode = unsafe {
-                encapsulation::fcntl_with_two_args(fd, libc::F_GETFL)
-            };
+            let mode = encapsulation::fcntl_with_two_args(fd, libc::F_GETFL);
             if mode.is_err() {
                 return None;
             }

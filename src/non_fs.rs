@@ -4,10 +4,10 @@
 /// A struct similar to the [`std::time::SystemTime`]
 ///
 /// [`std::time::SystemTime`]: https://doc.rust-lang.org/std/time/struct.SystemTime.html
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct SystemTime {
-    sec: i64,
-    nsec: i64,
+    pub sec: i64,
+    pub nsec: i64,
 }
 
 impl SystemTime {

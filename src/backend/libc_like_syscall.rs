@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 //! libc-like syscall bindings
 //!
 //! Different from `libc`, we don't have `errno`, so we can't return `-1` and set
@@ -69,7 +71,7 @@ pub(crate) fn read(
     count: size_t,
 ) -> Result<usize, c_int> {
     let res =
-        unsafe { syscall!(READ, fd as usize, buf as usize, count as usize) };
+        unsafe { syscall!(READ, fd as usize, buf as usize, count ) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -81,7 +83,7 @@ pub(crate) fn write(
     count: size_t,
 ) -> Result<usize, c_int> {
     let res =
-        unsafe { syscall!(WRITE, fd as usize, buf as usize, count as usize) };
+        unsafe { syscall!(WRITE, fd as usize, buf as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -94,13 +96,7 @@ pub(crate) fn pread(
     offset: off_t,
 ) -> Result<usize, c_int> {
     let res = unsafe {
-        syscall!(
-            PREAD64,
-            fd as usize,
-            buf as usize,
-            count as usize,
-            offset as usize
-        )
+        syscall!(PREAD64, fd as usize, buf as usize, count, offset as usize)
     };
 
     syscall_result(res).map(|num_read| num_read as usize)
@@ -118,7 +114,7 @@ pub(crate) fn pwrite(
             PWRITE64,
             fd as usize,
             buf as usize,
-            count as usize,
+            count,
             offset as usize
         )
     };
@@ -293,9 +289,8 @@ pub(crate) fn getdents64(
     dirp: *mut c_void,
     count: size_t,
 ) -> Result<usize, c_int> {
-    let res = unsafe {
-        syscall!(GETDENTS64, fd as usize, dirp as usize, count as usize)
-    };
+    let res =
+        unsafe { syscall!(GETDENTS64, fd as usize, dirp as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -341,6 +336,59 @@ pub(crate) fn fcntl_with_two_args(
     syscall_result(res).map(|res| res as c_int)
 }
 
+pub(crate) fn fsync(fd: c_int) -> Result<(), c_int> {
+    let res = unsafe { syscall!(FSYNC, fd as usize) };
+    syscall_result(res).map(drop)
+}
+
+pub(crate) fn fdatasync(fd: c_int) -> Result<(), c_int> {
+    let res = unsafe { syscall!(FDATASYNC, fd as usize) };
+    syscall_result(res).map(drop)
+}
+
+pub(crate) fn ftruncate(fd: c_int, length: off_t) -> Result<(), c_int> {
+    let res = unsafe { syscall!(FTRUNCATE, fd as usize, length as usize) };
+    syscall_result(res).map(drop)
+}
+
+pub(crate) fn chmod(
+    pathname: *const c_char,
+    mode: mode_t,
+) -> Result<(), c_int> {
+    let res = unsafe { syscall!(CHMOD, pathname as usize, mode as usize) };
+    syscall_result(res).map(drop)
+}
+
+pub(crate) fn fchmod(fd: c_int, mode: mode_t) -> Result<(), c_int> {
+    let res = unsafe { syscall!(FCHMOD, fd as usize, mode as usize) };
+    syscall_result(res).map(drop)
+}
+
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+pub(crate) struct Timespec {
+    pub(crate) tv_sec: time_t,
+    pub(crate) tv_nsec: c_long,
+}
+
+pub(crate) fn utimensat(
+    dirfd: c_int,
+    pathname: *const c_char,
+    times: *const Timespec,
+    flags: c_int,
+) -> Result<(), c_int> {
+    let res = unsafe {
+        syscall!(
+            UTIMENSAT,
+            dirfd as usize,
+            pathname as usize,
+            times as usize,
+            flags as usize
+        )
+    };
+    syscall_result(res).map(drop)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -352,8 +400,7 @@ mod test {
     #[test]
     fn test_open_close() {
         let fd =
-            open("/proc/self/mounts\0".as_ptr() as *const c_char, O_RDONLY, 0)
-                .unwrap();
+            open("/proc/self/mounts\0".as_ptr().cast(), O_RDONLY, 0).unwrap();
 
         close(fd).unwrap();
     }
@@ -361,177 +408,154 @@ mod test {
     #[test]
     fn test_creat_unlink() {
         let file = "/tmp/test_creat_unlink\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
         close(fd).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_unlink_is_a_dir() {
         let dir = "/tmp/test_unlink_is_a_dir\0";
-        mkdir(dir.as_ptr() as *const c_char, 0o777).unwrap();
+        mkdir(dir.as_ptr().cast(), 0o777).unwrap();
 
-        assert_eq!(unlink(dir.as_ptr() as *const c_char), Err(EISDIR));
+        assert_eq!(unlink(dir.as_ptr().cast()), Err(EISDIR));
 
-        rmdir(dir.as_ptr() as *const c_char).unwrap();
+        rmdir(dir.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_read_write() {
         let file = "/tmp/test_read_write\0";
         let fd_with_read_permission =
-            creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+            creat(file.as_ptr().cast(), 0o644).unwrap();
 
         let fd_with_write_permission =
-            open(file.as_ptr() as *const c_char, O_WRONLY, 0).unwrap();
+            open(file.as_ptr().cast(), O_WRONLY, 0).unwrap();
 
         let file_contents = "hello\0";
         assert_eq!(
-            write(
-                fd_with_write_permission,
-                file_contents.as_ptr() as *const c_void,
-                5
-            ),
+            write(fd_with_write_permission, file_contents.as_ptr().cast(), 5),
             Ok(5)
         );
 
-        let read_buf = [0; 5];
+        let mut read_buf: [u8; 5] = [0; 5];
         assert_eq!(
-            read(fd_with_read_permission, read_buf.as_ptr() as *mut c_void, 5),
+            read(fd_with_read_permission, read_buf.as_mut_ptr().cast(), 5),
             Ok(5)
         );
         assert_eq!(&read_buf, b"hello");
 
         close(fd_with_read_permission).unwrap();
         close(fd_with_write_permission).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_link() {
         let file = "/tmp/test_link\0";
         let ln = "/tmp/test_link_ln\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
         close(fd).unwrap();
 
-        link(file.as_ptr() as *const c_char, ln.as_ptr() as *const c_char)
-            .unwrap();
+        link(file.as_ptr().cast(), ln.as_ptr().cast()).unwrap();
 
-        unlink(file.as_ptr() as *const c_char).unwrap();
-        unlink(ln.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+        unlink(ln.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_mkdir() {
         let dir = "/tmp/test_mkdir\0";
-        mkdir(dir.as_ptr() as *const c_char, 0o777).unwrap();
+        mkdir(dir.as_ptr().cast(), 0o777).unwrap();
 
-        rmdir(dir.as_ptr() as *const c_char).unwrap();
+        rmdir(dir.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_rmdir_not_a_directory() {
         let file = "/tmp/test_rmdir_not_a_directory\0";
-        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
 
-        assert_eq!(rmdir(file.as_ptr() as *const c_char), Err(ENOTDIR));
+        assert_eq!(rmdir(file.as_ptr().cast()), Err(ENOTDIR));
 
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_rename() {
         let old_path = "/tmp/test_rename_old_path\0";
         let new_path = "/tmp/test_rename_new_path\0";
-        close(creat(old_path.as_ptr() as *const c_char, 0o644).unwrap())
-            .unwrap();
+        close(creat(old_path.as_ptr().cast(), 0o644).unwrap()).unwrap();
 
-        rename(
-            old_path.as_ptr() as *const c_char,
-            new_path.as_ptr() as *const c_char,
-        )
-        .unwrap();
+        rename(old_path.as_ptr().cast(), new_path.as_ptr().cast()).unwrap();
 
-        assert_eq!(unlink(old_path.as_ptr() as *const c_char), Err(ENOENT));
+        assert_eq!(unlink(old_path.as_ptr().cast()), Err(ENOENT));
 
-        unlink(new_path.as_ptr() as *const c_char).unwrap();
+        unlink(new_path.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_symlink() {
         let file = "/tmp/test_symlink\0";
         let soft_link = "/tmp/test_symlink_soft_link\0";
-        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
 
-        symlink(
-            file.as_ptr() as *const c_char,
-            soft_link.as_ptr() as *const c_char,
-        )
-        .unwrap();
+        symlink(file.as_ptr().cast(), soft_link.as_ptr().cast()).unwrap();
 
-        unlink(soft_link.as_ptr() as *const c_char).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(soft_link.as_ptr().cast()).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_stat() {
         let file = "/tmp/test_stat\0";
-        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
 
         let mut stat_buf = Stat::default();
-        stat(file.as_ptr() as *const c_char, &mut stat_buf as *mut Stat)
-            .unwrap();
+        stat(file.as_ptr().cast(), &mut stat_buf as *mut Stat).unwrap();
 
         assert_eq!(stat_buf.st_mode & S_IFMT, S_IFREG);
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_fstat() {
         let file = "/tmp/test_fstat\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
 
         let mut stat_buf = Stat::default();
         fstat(fd, &mut stat_buf as *mut Stat).unwrap();
 
         assert_eq!(stat_buf.st_mode & S_IFMT, S_IFREG);
         close(fd).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_lstat() {
         let file = "/tmp/test_lstat\0";
         let soft_link = "/tmp/test_lstat_link\0";
-        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
-        symlink(
-            file.as_ptr() as *const c_char,
-            soft_link.as_ptr() as *const c_char,
-        )
-        .unwrap();
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
+        symlink(file.as_ptr().cast(), soft_link.as_ptr().cast()).unwrap();
 
         let mut stat_buf = Stat::default();
-        lstat(
-            soft_link.as_ptr() as *const c_char,
-            &mut stat_buf as *mut Stat,
-        )
-        .unwrap();
+        lstat(soft_link.as_ptr().cast(), &mut stat_buf as *mut Stat).unwrap();
 
         assert_eq!(stat_buf.st_mode & S_IFMT, S_IFLNK);
 
-        unlink(file.as_ptr() as *const c_char).unwrap();
-        unlink(soft_link.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+        unlink(soft_link.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_statx() {
         let file = "/tmp/test_statx\0";
-        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
 
         let mut statx_buf = Statx::default();
         statx(
             0,
-            file.as_ptr() as *const c_char,
+            file.as_ptr().cast(),
             0,
             STATX_ALL,
             &mut statx_buf as *mut Statx,
@@ -539,112 +563,97 @@ mod test {
         .unwrap();
 
         assert_eq!(statx_buf.stx_mode & S_IFMT as u16, S_IFREG as u16);
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_getdents64() {
         let tmp_dir = "/tmp\0";
-        let tmp_dir_fd =
-            open(tmp_dir.as_ptr() as *const c_char, O_RDONLY, 0).unwrap();
+        let tmp_dir_fd = open(tmp_dir.as_ptr().cast(), O_RDONLY, 0).unwrap();
         let mut buf = [0_u8; 100];
-        getdents64(tmp_dir_fd, &mut buf as *mut u8 as *mut c_void, 100)
-            .unwrap();
+        getdents64(tmp_dir_fd, (&mut buf as *mut u8).cast(), 100).unwrap();
     }
 
     #[test]
     fn test_getdents64_not_a_directory() {
         let file = "/tmp/test_getdents64_not_a_directory\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
 
         let mut buf = [0_u8; 100];
         assert_eq!(
-            getdents64(fd, &mut buf as *mut u8 as *mut c_void, 100),
+            getdents64(fd, (&mut buf as *mut u8).cast(), 100),
             Err(ENOTDIR)
         );
 
         close(fd).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_chroot() {
-        assert_eq!(chroot(".\0".as_ptr() as *const c_char), Err(libc::EPERM));
+        assert_eq!(chroot(".\0".as_ptr().cast()), Err(libc::EPERM));
     }
 
     #[test]
     fn test_lseek64() {
         let file = "/tmp/test_lseek\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
         close(fd).unwrap();
 
-        let fd = open(file.as_ptr() as *const c_char, O_RDWR, 0).unwrap();
+        let fd = open(file.as_ptr().cast(), O_RDWR, 0).unwrap();
 
-        write(fd, "hello\0".as_ptr() as *const c_void, 5).unwrap();
+        write(fd, "hello\0".as_ptr().cast(), 5).unwrap();
 
         assert_eq!(lseek64(fd, 0, SEEK_SET).unwrap(), 0);
 
         close(fd).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_pread() {
         let file = "/tmp/test_pread\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
         close(fd).unwrap();
 
-        let fd = open(file.as_ptr() as *const c_char, O_RDWR, 0).unwrap();
-        write(fd, "hello world\0".as_ptr() as *const c_void, 11).unwrap();
+        let fd = open(file.as_ptr().cast(), O_RDWR, 0).unwrap();
+        write(fd, "hello world\0".as_ptr().cast(), 11).unwrap();
 
         let mut buf = [0_u8; 5];
-        assert_eq!(
-            pread(fd, buf.as_mut_ptr() as *mut c_void, 5, 6).unwrap(),
-            5
-        );
+        assert_eq!(pread(fd, buf.as_mut_ptr().cast(), 5, 6).unwrap(), 5);
 
         assert_eq!(&buf, b"world");
 
         close(fd).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_pwrite() {
         let file = "/tmp/test_pwrite\0";
-        let fd = creat(file.as_ptr() as *const c_char, 0o644).unwrap();
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
         close(fd).unwrap();
 
-        let fd = open(file.as_ptr() as *const c_char, O_RDWR, 0).unwrap();
-        write(fd, "hello world\0".as_ptr() as *const c_void, 11).unwrap();
+        let fd = open(file.as_ptr().cast(), O_RDWR, 0).unwrap();
+        write(fd, "hello world\0".as_ptr().cast(), 11).unwrap();
 
-        assert_eq!(
-            pwrite(fd, "steve\0".as_ptr() as *const c_void, 5, 6).unwrap(),
-            5
-        );
+        assert_eq!(pwrite(fd, "steve\0".as_ptr().cast(), 5, 6).unwrap(), 5);
 
         let mut buf = [0_u8; 11];
-        assert_eq!(
-            pread(fd, buf.as_mut_ptr() as *mut c_void, 11, 0).unwrap(),
-            11
-        );
+        assert_eq!(pread(fd, buf.as_mut_ptr().cast(), 11, 0).unwrap(), 11);
 
         assert_eq!(&buf, b"hello steve");
 
         close(fd).unwrap();
-        unlink(file.as_ptr() as *const c_char).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
     }
 
     #[test]
     fn test_readlink() {
         let file = "/tmp/test_readlink\0";
         let soft_link = "/tmp/test_readlink_link\0";
-        close(creat(file.as_ptr() as *const c_char, 0o644).unwrap()).unwrap();
-        symlink(
-            file.as_ptr() as *const c_char,
-            soft_link.as_ptr() as *const c_char,
-        )
-        .unwrap();
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
+        symlink(file.as_ptr().cast(), soft_link.as_ptr().cast()).unwrap();
 
         let buf = [0; 19];
         let bytes_read = readlink(
@@ -658,5 +667,107 @@ mod test {
 
         unlink(file.as_ptr().cast()).unwrap();
         unlink(soft_link.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_fsync() {
+        let file = "/tmp/test_fsync\0";
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
+
+        fsync(fd).unwrap();
+
+        close(fd).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_fdatasync() {
+        let file = "/tmp/test_fdatasync\0";
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
+
+        fdatasync(fd).unwrap();
+
+        close(fd).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_ftruncate() {
+        let file = "/tmp/test_ftruncate\0";
+
+        let fd_with_write_permission =
+            open(file.as_ptr().cast(), O_CREAT | O_RDWR, 0).unwrap();
+        assert_eq!(
+            5,
+            write(fd_with_write_permission, "hello\0".as_ptr().cast(), 5)
+                .unwrap()
+        );
+        ftruncate(fd_with_write_permission, 3).unwrap();
+
+        let mut stat_buf = Stat::default();
+        fstat(fd_with_write_permission, &mut stat_buf).unwrap();
+        assert_eq!(stat_buf.st_size, 3);
+
+        close(fd_with_write_permission).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_chmod() {
+        let file = "/tmp/test_chmod_libc\0";
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
+
+        chmod(file.as_ptr().cast(), 0o000).unwrap();
+
+        let mut statx_buf = Statx::default();
+        statx(
+            0,
+            file.as_ptr().cast(),
+            0,
+            STATX_ALL,
+            &mut statx_buf as *mut Statx,
+        )
+        .unwrap();
+
+        assert_eq!(statx_buf.stx_mode & 0o777, 0o000);
+
+        unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_fchmod() {
+        let file = "/tmp/test_fchmod_libc\0";
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
+
+        fchmod(fd, 0o000).unwrap();
+
+        let mut statx_buf = Statx::default();
+        statx(
+            0,
+            file.as_ptr().cast(),
+            0,
+            STATX_ALL,
+            &mut statx_buf as *mut Statx,
+        )
+        .unwrap();
+
+        assert_eq!(statx_buf.stx_mode & 0o777, 0o000);
+
+        close(fd).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_utimensat() {
+        let file = "/tmp/test_utimensat_libc\0";
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
+
+        let mut times = [Timespec::default(); 2];
+        times[0].tv_nsec = libc::UTIME_OMIT;
+        times[1].tv_nsec = libc::UTIME_OMIT;
+        utimensat(0, file.as_ptr().cast(), &times as *const Timespec, 0)
+            .unwrap();
+
+        unlink(file.as_ptr().cast());
     }
 }
