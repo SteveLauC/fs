@@ -60,7 +60,7 @@ pub fn hard_link<P: AsRef<Path>, Q: AsRef<Path>>(
 /// Given a path, query the file system to get information about a
 /// file, directory, etc.
 pub fn metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
-    unimplemented!()
+    encapsulation::statx(path.as_ref()).map(Metadata)
 }
 
 /// Read the entire contents of a file into a bytes vector.
@@ -85,8 +85,9 @@ pub fn read_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
 }
 
 /// Removes an empty directory.
+#[inline]
 pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
-    unimplemented!()
+    encapsulation::rmdir(path)
 }
 
 /// Removes a directory at this path, after removing all its contents. Use
@@ -96,27 +97,30 @@ pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
 }
 
 /// Removes a file from the filesystem.
+#[inline]
 pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<()> {
-    unimplemented!()
+    encapsulation::unlink(path)
 }
 
 /// Rename a file or directory to a new name, replacing the original file
 /// if to already exists.
+#[inline]
 pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<()> {
-    unimplemented!()
+    encapsulation::rename(from, to)
 }
 
 /// Changes the permissions found on a file or a directory.
+#[inline]
 pub fn set_permissions<P: AsRef<Path>>(
     path: P,
     perm: Permissions,
 ) -> Result<()> {
-    unimplemented!()
+    encapsulation::chmod(path, perm.0)
 }
 
 /// Query the metadata about a file without following symlinks.
 pub fn symlink_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
-    unimplemented!()
+    encapsulation::lstatx(path.as_ref()).map(Metadata)
 }
 
 /// Write a slice as the entire contents of a file.
@@ -128,43 +132,48 @@ pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(
 }
 
 /// Change the owner and group of the specified path.
+#[inline]
 pub fn chown<P: AsRef<Path>>(
     dir: P,
     uid: Option<u32>,
     gid: Option<u32>,
 ) -> Result<()> {
-    unimplemented!()
+    encapsulation::chown(dir, uid, gid)
 }
 
 /// Change the owner and group of the file referenced by the specified open file
 /// descriptor.
+#[inline]
 pub fn fchown<F: AsFd>(
     fd: F,
     uid: Option<u32>,
     gid: Option<u32>,
 ) -> Result<()> {
-    unimplemented!()
+    encapsulation::fchown(fd, uid, gid)
 }
 
 /// Change the owner and group of the specified path, without
 /// dereferencing symbolic links.
+#[inline]
 pub fn lchown<P: AsRef<Path>>(
     dir: P,
     uid: Option<u32>,
     gid: Option<u32>,
 ) -> Result<()> {
-    unimplemented!()
+    encapsulation::lchown(dir, uid, gid)
 }
 
 /// Change the root directory of the current process to the specified path.
+#[inline]
 pub fn chroot<P: AsRef<Path>>(dir: P) -> Result<()> {
-    unimplemented!()
+    encapsulation::chroot(dir)
 }
 
 /// Creates a new symbolic link on the filesystem.!
+#[inline]
 pub fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
     original: P,
     link: Q,
 ) -> Result<()> {
-    unimplemented!()
+    encapsulation::symlink(original, link)
 }

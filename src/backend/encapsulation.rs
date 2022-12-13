@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 //! Rusty encapsulation for libc-like syscall.
 
 use super::{
@@ -136,7 +134,7 @@ pub(crate) fn creat<P: AsRef<Path>>(path: P, mode: Mode) -> Result<OwnedFd> {
 }
 
 /// Reads from a stream
-pub(crate) fn read<Fd: AsFd>(fd: &Fd, buf: &mut [u8]) -> Result<usize> {
+pub(crate) fn read<Fd: AsFd>(fd: Fd, buf: &mut [u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
     libc_like_syscall::read(
@@ -148,7 +146,7 @@ pub(crate) fn read<Fd: AsFd>(fd: &Fd, buf: &mut [u8]) -> Result<usize> {
 }
 
 /// Writes to a stream
-pub(crate) fn write<Fd: AsFd>(fd: &Fd, buf: &[u8]) -> Result<usize> {
+pub(crate) fn write<Fd: AsFd>(fd: Fd, buf: &[u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
     libc_like_syscall::write(
@@ -161,7 +159,7 @@ pub(crate) fn write<Fd: AsFd>(fd: &Fd, buf: &[u8]) -> Result<usize> {
 
 /// Read from a file at the given offset
 pub(crate) fn pread<Fd: AsFd>(
-    fd: &Fd,
+    fd: Fd,
     buf: &mut [u8],
     offset: u64,
 ) -> Result<usize> {
@@ -227,7 +225,10 @@ pub(crate) fn unlink<P: AsRef<Path>>(path_name: P) -> Result<()> {
 ///
 /// Note: `target` and `link_path` should not contain byte 0, or this function
 /// will panic.
-pub(crate) fn symlink<P: AsRef<Path>>(target: P, link_path: P) -> Result<()> {
+pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
+    target: P,
+    link_path: Q,
+) -> Result<()> {
     let target = CString::new(target.as_ref().as_os_str().as_bytes()).unwrap();
     let link_path =
         CString::new(link_path.as_ref().as_os_str().as_bytes()).unwrap();
@@ -262,7 +263,10 @@ pub(crate) fn rmdir<P: AsRef<Path>>(path_name: P) -> Result<()> {
 ///
 /// Note: `old_path` and `new_path` should not contain byte 0, or this function
 /// will panic.
-pub(crate) fn rename<P: AsRef<Path>>(old_path: P, new_path: P) -> Result<()> {
+pub(crate) fn rename<P: AsRef<Path>, Q: AsRef<Path>>(
+    old_path: P,
+    new_path: Q,
+) -> Result<()> {
     let old_path =
         CString::new(old_path.as_ref().as_os_str().as_bytes()).unwrap();
     let new_path =
@@ -409,7 +413,7 @@ pub(crate) fn lstat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
 }
 
 /// Get file status
-pub(crate) fn fstat<Fd: AsFd>(fd: &Fd) -> Result<Stat> {
+pub(crate) fn fstat<Fd: AsFd>(fd: Fd) -> Result<Stat> {
     let mut stat_buf = libc_like_syscall::Stat::default();
 
     match libc_like_syscall::fstat(
@@ -576,7 +580,7 @@ pub(crate) fn lstatx<P: AsRef<Path>>(path: P) -> Result<Statx> {
     }
 }
 
-pub(crate) fn fstatx<Fd: AsFd>(fd: &Fd) -> Result<Statx> {
+pub(crate) fn fstatx<Fd: AsFd>(fd: Fd) -> Result<Statx> {
     let mut statx_buf = libc_like_syscall::Statx::default();
 
     match libc_like_syscall::statx(
@@ -592,7 +596,7 @@ pub(crate) fn fstatx<Fd: AsFd>(fd: &Fd) -> Result<Statx> {
 }
 
 /// Gets directory entries
-pub(crate) fn getdents64<Fd: AsFd>(fd: &Fd, dirp: &mut [u8]) -> Result<usize> {
+pub(crate) fn getdents64<Fd: AsFd>(fd: Fd, dirp: &mut [u8]) -> Result<usize> {
     libc_like_syscall::getdents64(
         fd.as_fd().as_raw_fd(),
         dirp.as_mut_ptr() as *mut libc::c_void,
@@ -773,7 +777,7 @@ pub(crate) enum Whence {
 
 /// reposition read/write file offset
 pub(crate) fn lseek64<Fd: AsFd>(
-    fd: &Fd,
+    fd: Fd,
     offset: i64,
     whence: Whence,
 ) -> Result<u64> {
@@ -812,14 +816,14 @@ pub(crate) use libc_like_syscall::fcntl_with_two_args;
 /// Transfers  ("flushes") all modified in-core data of (i.e., modified buffer
 /// cache pages for) the file referred to by the file descriptor fd to the
 /// disk device
-pub(crate) fn fsync<Fd: AsFd>(fd: &Fd) -> Result<()> {
+pub(crate) fn fsync<Fd: AsFd>(fd: Fd) -> Result<()> {
     libc_like_syscall::fsync(fd.as_fd().as_raw_fd())
         .map_err(Error::from_raw_os_error)
 }
 /// `fdatasync()` is similar to [`fsync()`], but does not flush modified metadata
 /// unless that metadata  is needed in order to allow a subsequent data retrieval
 /// to be correctly handled
-pub(crate) fn fdatasync<Fd: AsFd>(fd: &Fd) -> Result<()> {
+pub(crate) fn fdatasync<Fd: AsFd>(fd: Fd) -> Result<()> {
     libc_like_syscall::fdatasync(fd.as_fd().as_raw_fd())
         .map_err(Error::from_raw_os_error)
 }
@@ -829,7 +833,7 @@ pub(crate) fn fdatasync<Fd: AsFd>(fd: &Fd) -> Result<()> {
 /// If the file previously was larger than this size, the extra data is lost.
 /// If the file previously was shorter, it is extended, and the extended part
 /// reads as null bytes ('\0').
-pub(crate) fn ftruncate<Fd: AsFd>(fd: &Fd, length: u64) -> Result<()> {
+pub(crate) fn ftruncate<Fd: AsFd>(fd: Fd, length: u64) -> Result<()> {
     let length = length
         .try_into()
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
@@ -848,7 +852,7 @@ pub(crate) fn chmod<P: AsRef<Path>>(pathname: P, mode: Mode) -> Result<()> {
 }
 
 /// Changes permissions of a file
-pub(crate) fn fchmod<Fd: AsFd>(fd: &Fd, mode: Mode) -> Result<()> {
+pub(crate) fn fchmod<Fd: AsFd>(fd: Fd, mode: Mode) -> Result<()> {
     let mode = mode.bits();
     libc_like_syscall::fchmod(fd.as_fd().as_raw_fd(), mode)
         .map_err(Error::from_raw_os_error)
@@ -861,17 +865,22 @@ pub(crate) enum TimestampSpec {
     Set(SystemTime),
 }
 
-fn alter_timespec_per_timestampspec(
-    timestamp_spec: &TimestampSpec,
-    timespec: &mut libc_like_syscall::Timespec,
-) {
-    match timestamp_spec {
-        TimestampSpec::Omit => timespec.tv_nsec = libc::UTIME_OMIT,
-        TimestampSpec::SetToNow => timespec.tv_nsec = libc::UTIME_NOW,
-        TimestampSpec::Set(real_atime) => {
-            timespec.tv_sec = real_atime.sec;
-            timespec.tv_nsec = real_atime.nsec;
+impl From<&TimestampSpec> for libc_like_syscall::Timespec {
+    fn from(value: &TimestampSpec) -> Self {
+        let mut default = libc_like_syscall::Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+
+        match value {
+            TimestampSpec::Omit => default.tv_nsec = libc::UTIME_OMIT,
+            TimestampSpec::SetToNow => default.tv_nsec = libc::UTIME_NOW,
+            TimestampSpec::Set(time) => {
+                default.tv_sec = time.sec;
+                default.tv_nsec = time.nsec;
+            }
         }
+        default
     }
 }
 
@@ -880,14 +889,12 @@ fn alter_timespec_per_timestampspec(
 // This syscall is implemented on the top of `utimensat(2)`, for more information, see
 // https://man7.org/linux/man-pages/man2/utimensat.2.html
 pub(crate) fn futimens<Fd: AsFd>(
-    fd: &Fd,
-    atime: TimestampSpec,
-    mtime: TimestampSpec,
+    fd: Fd,
+    atime: &TimestampSpec,
+    mtime: &TimestampSpec,
 ) -> Result<()> {
     // atime and mtime
-    let mut times = [libc_like_syscall::Timespec::default(); 2];
-    alter_timespec_per_timestampspec(&atime, &mut times[0]);
-    alter_timespec_per_timestampspec(&mtime, &mut times[1]);
+    let mut times = [atime.into(), mtime.into()];
 
     libc_like_syscall::utimensat(
         fd.as_fd().as_raw_fd(),
@@ -898,10 +905,58 @@ pub(crate) fn futimens<Fd: AsFd>(
     .map_err(Error::from_raw_os_error)
 }
 
+/// Change ownership of a file
+pub(crate) fn chown<P: AsRef<Path>>(
+    pathname: P,
+    owner: Option<u32>,
+    group: Option<u32>,
+) -> Result<()> {
+    let pathname =
+        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    // libc::uid_t and libc::gid_t are unsigned number, -1 = MAX
+    let owner = owner.unwrap_or(u32::MAX);
+    let group = group.unwrap_or(u32::MAX);
+
+    libc_like_syscall::chown(pathname.as_ptr(), owner, group)
+        .map_err(Error::from_raw_os_error)
+}
+
+/// Change ownership of the file that are specified by the open file descriptor `fd`
+pub(crate) fn fchown<Fd: AsFd>(
+    fd: Fd,
+    owner: Option<u32>,
+    group: Option<u32>,
+) -> Result<()> {
+    let fd = fd.as_fd().as_raw_fd();
+    let owner = owner.unwrap_or(u32::MAX);
+    let group = group.unwrap_or(u32::MAX);
+    libc_like_syscall::fchown(fd, owner, group)
+        .map_err(Error::from_raw_os_error)
+}
+
+/// Change ownership of a file
+///
+/// If `pathname` refers to a symlink, then the ownership of the link **itself**
+/// will be changed.
+pub(crate) fn lchown<P: AsRef<Path>>(
+    pathname: P,
+    owner: Option<u32>,
+    group: Option<u32>,
+) -> Result<()> {
+    let pathname =
+        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    // libc::uid_t and libc::gid_t are unsigned number, -1 = MAX
+    let owner = owner.unwrap_or(u32::MAX);
+    let group = group.unwrap_or(u32::MAX);
+
+    libc_like_syscall::lchown(pathname.as_ptr(), owner, group)
+        .map_err(Error::from_raw_os_error)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use libc::futimes;
+    use std::os::fd::BorrowedFd;
 
     #[test]
     fn test_open() {
@@ -1247,7 +1302,7 @@ mod test {
         )
         .unwrap();
 
-        futimens(&fd.as_fd(), TimestampSpec::Omit, TimestampSpec::Omit)
+        futimens(&fd.as_fd(), &TimestampSpec::Omit, &TimestampSpec::Omit)
             .unwrap();
         unlink(file).unwrap();
     }
@@ -1264,8 +1319,8 @@ mod test {
 
         futimens(
             &fd.as_fd(),
-            TimestampSpec::SetToNow,
-            TimestampSpec::SetToNow,
+            &TimestampSpec::SetToNow,
+            &TimestampSpec::SetToNow,
         )
         .unwrap();
         unlink(file).unwrap();
@@ -1285,8 +1340,8 @@ mod test {
         let mtime = SystemTime::new(1, 0);
         futimens(
             &fd.as_fd(),
-            TimestampSpec::Set(atime),
-            TimestampSpec::Set(mtime),
+            &TimestampSpec::Set(atime),
+            &TimestampSpec::Set(mtime),
         )
         .unwrap();
 
@@ -1296,5 +1351,74 @@ mod test {
         assert_eq!(statx.mtime(), (1, 0));
 
         unlink(file).unwrap();
+    }
+
+    #[test]
+    fn test_chown() {
+        let file = "/tmp/test_chown_encap";
+        open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+        let statx = statx(file).unwrap();
+        let uid = Some(statx.uid());
+        let gid = Some(statx.gid());
+
+        chown(file, uid, gid).unwrap();
+        chown(file, None, None).unwrap();
+        chown(file, uid, None).unwrap();
+        chown(file, None, gid).unwrap();
+        unlink(file).unwrap();
+        chown(file, uid, gid).unwrap_err();
+    }
+
+    #[test]
+    fn test_fchown() {
+        let file = "/tmp/test_fchown_encap";
+        let fd = open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+
+        let statx = fstatx(&fd).unwrap();
+        let uid = Some(statx.uid());
+        let gid = Some(statx.gid());
+
+        fchown(&fd, uid, gid).unwrap();
+        fchown(&fd, None, None).unwrap();
+        fchown(&fd, uid, None).unwrap();
+        fchown(&fd, None, gid).unwrap();
+        unlink(file).unwrap();
+        let fd_that_is_not_open = unsafe { BorrowedFd::borrow_raw(9999) };
+        fchown(fd_that_is_not_open, uid, gid).unwrap_err();
+    }
+
+    #[test]
+    fn test_lchown() {
+        let file = "/tmp/test_lchown_encap";
+        let link = "/tmp/test_lchown_link_encap";
+        open(
+            file,
+            Flags::O_CREAT | Flags::O_RDWR,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+        symlink(file, link).unwrap();
+
+        let statx = lstatx(link).unwrap();
+        let uid = Some(statx.uid());
+        let gid = Some(statx.gid());
+
+        lchown(link, uid, gid).unwrap();
+        lchown(link, None, None).unwrap();
+        lchown(link, uid, None).unwrap();
+        lchown(link, None, gid).unwrap();
+        unlink(file).unwrap();
+        unlink(link).unwrap();
+        lchown(link, uid, gid).unwrap_err();
     }
 }

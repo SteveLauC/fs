@@ -99,8 +99,8 @@ impl File {
     pub fn set_times(&self, times: FileTimes) -> Result<()> {
         encapsulation::futimens(
             &self.fd.as_fd(),
-            TimestampSpec::Set(times.0[0]),
-            TimestampSpec::Set(times.0[1]),
+            &TimestampSpec::Set(times.0[0]),
+            &TimestampSpec::Set(times.0[1]),
         )
     }
 

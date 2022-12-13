@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 //! libc-like syscall bindings
 //!
 //! Different from `libc`, we don't have `errno`, so we can't return `-1` and set
@@ -18,8 +16,8 @@ use libc::{
 };
 use sc::{
     nr::{
-        CHROOT, CLOSE, FCNTL, FSTAT, GETDENTS64, LINK, LSEEK, LSTAT, MKDIR,
-        OPEN, RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
+        CHOWN, CHROOT, CLOSE, FCHOWN, FCNTL, FSTAT, GETDENTS64, LCHOWN, LINK,
+        LSEEK, LSTAT, MKDIR, OPEN, RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
     },
     syscall,
 };
@@ -307,6 +305,7 @@ pub(crate) fn lseek64(
     syscall_result(res).map(|new_offset| new_offset as u64)
 }
 
+#[inline]
 pub(crate) fn readlink(
     pathname: *const c_char,
     buf: *mut c_char,
@@ -319,6 +318,7 @@ pub(crate) fn readlink(
 }
 
 /// A simplified version of `fcntl(2)`, supports only two arguments
+#[inline]
 pub(crate) fn fcntl_with_two_args(
     fd: c_int,
     cmd: c_int,
@@ -328,21 +328,25 @@ pub(crate) fn fcntl_with_two_args(
     syscall_result(res).map(|res| res as c_int)
 }
 
+#[inline]
 pub(crate) fn fsync(fd: c_int) -> Result<(), c_int> {
     let res = unsafe { syscall!(FSYNC, fd as usize) };
     syscall_result(res).map(drop)
 }
 
+#[inline]
 pub(crate) fn fdatasync(fd: c_int) -> Result<(), c_int> {
     let res = unsafe { syscall!(FDATASYNC, fd as usize) };
     syscall_result(res).map(drop)
 }
 
+#[inline]
 pub(crate) fn ftruncate(fd: c_int, length: off_t) -> Result<(), c_int> {
     let res = unsafe { syscall!(FTRUNCATE, fd as usize, length as usize) };
     syscall_result(res).map(drop)
 }
 
+#[inline]
 pub(crate) fn chmod(
     pathname: *const c_char,
     mode: mode_t,
@@ -351,6 +355,7 @@ pub(crate) fn chmod(
     syscall_result(res).map(drop)
 }
 
+#[inline]
 pub(crate) fn fchmod(fd: c_int, mode: mode_t) -> Result<(), c_int> {
     let res = unsafe { syscall!(FCHMOD, fd as usize, mode as usize) };
     syscall_result(res).map(drop)
@@ -363,6 +368,7 @@ pub(crate) struct Timespec {
     pub(crate) tv_nsec: c_long,
 }
 
+#[inline]
 pub(crate) fn utimensat(
     dirfd: c_int,
     pathname: *const c_char,
@@ -377,6 +383,42 @@ pub(crate) fn utimensat(
             times as usize,
             flags as usize
         )
+    };
+    syscall_result(res).map(drop)
+}
+
+#[inline]
+pub(crate) fn chown(
+    pathname: *const c_char,
+    owner: uid_t,
+    group: gid_t,
+) -> Result<(), c_int> {
+    let res = unsafe {
+        syscall!(CHOWN, pathname as usize, owner as usize, group as usize)
+    };
+    syscall_result(res).map(drop)
+}
+
+#[inline]
+pub(crate) fn fchown(
+    fd: c_int,
+    owner: uid_t,
+    group: gid_t,
+) -> Result<(), c_int> {
+    let res = unsafe {
+        syscall!(FCHOWN, fd as usize, owner as usize, group as usize)
+    };
+    syscall_result(res).map(drop)
+}
+
+#[inline]
+pub(crate) fn lchown(
+    pathname: *const c_char,
+    owner: uid_t,
+    group: gid_t,
+) -> Result<(), c_int> {
+    let res = unsafe {
+        syscall!(LCHOWN, pathname as usize, owner as usize, group as usize)
     };
     syscall_result(res).map(drop)
 }
@@ -760,6 +802,88 @@ mod test {
         utimensat(0, file.as_ptr().cast(), &times as *const Timespec, 0)
             .unwrap();
 
-        unlink(file.as_ptr().cast());
+        unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_chown() {
+        let file = "/tmp/test_chown_libc\0";
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
+
+        let mut statx_buf = Statx::default();
+        statx(
+            0,
+            file.as_ptr().cast(),
+            0,
+            STATX_ALL,
+            &mut statx_buf as *mut Statx,
+        )
+        .unwrap();
+        let uid = statx_buf.stx_uid;
+        let gid = statx_buf.stx_gid;
+
+        // Only user with privilege can change owner of a file
+        // we "update" its owner to its owner, which is NOT a change.
+        chown(file.as_ptr().cast(), uid, gid).unwrap();
+        chown(file.as_ptr().cast(), uid_t::MAX, gid_t::MAX).unwrap();
+        chown(file.as_ptr().cast(), uid, gid_t::MAX).unwrap();
+        chown(file.as_ptr().cast(), uid_t::MAX, gid_t::MAX).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+        chown(file.as_ptr().cast(), uid, gid).unwrap_err();
+    }
+
+    #[test]
+    fn test_fchown() {
+        let file = "/tmp/test_fchown_libc\0";
+        let fd = creat(file.as_ptr().cast(), 0o644).unwrap();
+
+        let mut statx_buf = Statx::default();
+        statx(
+            0,
+            file.as_ptr().cast(),
+            0,
+            STATX_ALL,
+            &mut statx_buf as *mut Statx,
+        )
+        .unwrap();
+        let uid = statx_buf.stx_uid;
+        let gid = statx_buf.stx_gid;
+
+        // Only user with privilege can change owner of a file
+        // we "update" its owner to its owner, which is NOT a change.
+        fchown(fd, uid, gid).unwrap();
+        fchown(fd, uid_t::MAX, gid_t::MAX).unwrap();
+        fchown(fd, uid, gid_t::MAX).unwrap();
+        fchown(fd, uid_t::MAX, gid_t::MAX).unwrap();
+        unlink(file.as_ptr().cast()).unwrap();
+        fchown(99999, uid, gid).unwrap_err();
+    }
+    #[test]
+    fn test_lchown() {
+        let file = "/tmp/test_lchown_libc\0";
+        let link = "/tmp/test_lchown_link_libc\0";
+        close(creat(file.as_ptr().cast(), 0o644).unwrap()).unwrap();
+        symlink(file.as_ptr().cast(), link.as_ptr().cast()).unwrap();
+
+        let mut statx_buf = Statx::default();
+        statx(
+            0,
+            link.as_ptr().cast(),
+            libc::AT_SYMLINK_NOFOLLOW,
+            STATX_ALL,
+            &mut statx_buf as *mut Statx,
+        )
+        .unwrap();
+        let uid = statx_buf.stx_uid;
+        let gid = statx_buf.stx_gid;
+
+        lchown(link.as_ptr().cast(), uid, gid).unwrap();
+        lchown(link.as_ptr().cast(), uid_t::MAX, gid_t::MAX).unwrap();
+        lchown(link.as_ptr().cast(), uid, gid_t::MAX).unwrap();
+        lchown(link.as_ptr().cast(), uid_t::MAX, gid_t::MAX).unwrap();
+        unlink(link.as_ptr().cast()).unwrap();
+        lchown(link.as_ptr().cast(), uid, gid).unwrap_err();
+
+        unlink(file.as_ptr().cast()).unwrap();
     }
 }

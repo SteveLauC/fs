@@ -1,4 +1,5 @@
 #![feature(io_error_uncategorized)]
+// #![deny(unused)]
 
 mod backend;
 mod dir;
