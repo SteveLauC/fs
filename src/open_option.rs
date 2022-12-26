@@ -35,16 +35,17 @@ pub struct OpenOptions {
 
 impl OpenOptions {
     /// `get_access_mode()` and `get_creation_mode()` are helper functions used to map
-    /// `OpenOptions` to the `flag` argument of `open(2)`
+    /// `OpenOptions` to the `flag` argument (of type `c_int`) of `open(2)`
     ///
     /// `get_access_mode()` will generates an int that possibly contains `O_RDONLY`,
     /// `O_WRONLY`, `O_RDWR` and `O_APPEND`
     ///
     /// #### Mappings
+    ///
     /// There are actually 2^3 (8) cases, but when `append` is true, the value of
-    /// `write` does not matter thus `true, true, true` and `true, false, true` can
-    /// be abbreviated as `true, _, true`. Similarly, `false, true, true` and
-    /// `false, false, true` can be aggregated as `false, _, true`
+    /// `write` will also be set to true, which means that `true, true, true` and
+    /// `true, false, true` can be abbreviated as `true, _, true`. Similarly,
+    /// `false, true, true` and `false, false, true` can be aggregated as `false, _, true`
     ///
     /// 5: `(true, true, true)` => `O_RDWR | O_APPEND`
     /// 3: `(true, true, false)` => `O_RDWR`
@@ -75,7 +76,7 @@ impl OpenOptions {
         //
         // 1. To `truncate/create/create_new` a file, `write` must be set.
         // 2. You can not `truncate` and `append` a file at the same time.
-        //    When `create_new` is set, then `truncate` will be ignored.
+        //    When `create_new` is set, `truncate` will be ignored.
         match (self.write, self.append) {
             (true, false) => {}
             (false, false) => {
@@ -83,7 +84,6 @@ impl OpenOptions {
                     return Err(Error::from_raw_os_error(libc::EINVAL));
                 }
             }
-            // When `append` is ture, `write` is `true`
             (_, true) => {
                 if self.truncate && !self.create_new {
                     return Err(Error::from_raw_os_error(libc::EINVAL));
