@@ -18,7 +18,7 @@ playing it on other platforms may elicit **Undefined Behavior**.
 
 ```toml
 [dependencies]
-fs = {git = "https://github.com/SteveLauC/fs" }
+fs = { git = "https://github.com/SteveLauC/fs" }
 ```
 
 ```rust
