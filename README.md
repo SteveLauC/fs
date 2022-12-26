@@ -6,7 +6,7 @@ A toy file system standard library implementation that does NOT depend on `libc`
 (raw syscall). This crate is **ONLY** guaranteed to work on `x86_64-unknown-linux-gnu`,
 playing it on other platforms may elicit **Undefined Behavior**.
 
-#### Table Of Contents
+## Table Of Contents
 
 * [Getting Started](https://github.com/SteveLauC/fs#getting-started)
 * [Project Hierarchy](https://github.com/SteveLauC/fs#project-hierarchy)
@@ -14,7 +14,7 @@ playing it on other platforms may elicit **Undefined Behavior**.
   * [Backend](https://github.com/SteveLauC/fs#backend)
 * [Funny Stuff](https://github.com/SteveLauC/fs#funny-stuff)
 
-#### Getting Started
+## Getting Started
 
 ```toml
 [dependencies]
@@ -37,9 +37,9 @@ $ cargo +nightly r
 File { fd: 3, path: "/home/steve/Documents/workspace/rust", read: true, write: false }
 ```
 
-#### Project Hierarchy
+## Project Hierarchy
 
-##### Modules
+#### Modules
 
 The source code of this crate is divided according to some key types( e.g., for
 anything related with `struct File` is placed in `file.rs`):
@@ -78,7 +78,7 @@ pub use open_option::*;
 pub use permissions::*;
 ```
 
-##### Backend
+#### Backend
 
 Since we do not use `libc` in our implementation, manually involving syscall becomes
 necessary. You can find these code under directory `backend`:
@@ -148,7 +148,7 @@ pub(crate) fn open<P: AsRef<Path>>(
 
 As you can see, the types of arguments become rusty and less error-prone.
 
-#### Funny Stuff
+## Funny Stuff
 
 The process of implementing this crate is more about reading the code from the
 Rust stdlib. During my reading, I record those interesting stuff in 
