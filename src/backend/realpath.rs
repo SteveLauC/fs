@@ -53,8 +53,7 @@ impl Paths {
             // Note that to avoid allocating memory, we directly alter the `length`
             // field of `self.parsed (PathBuf)`.
             assert!(parent_len <= self.parsed.capacity());
-            let mut p_to_heap_memory =
-                &mut self.parsed as *mut PathBuf as *mut usize;
+            let mut p_to_heap_memory = &mut self.parsed as *mut PathBuf as *mut usize;
             unsafe {
                 p_to_heap_memory = p_to_heap_memory.add(2);
                 *p_to_heap_memory = parent_len;
@@ -113,8 +112,7 @@ pub(crate) fn realpath<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
         }
 
         if paths.parsed.is_symlink() {
-            let link_content =
-                paths.parsed.read_link().expect("can not follow symlink");
+            let link_content = paths.parsed.read_link().expect("can not follow symlink");
             if link_content.is_absolute() {
                 let clean_link: PathBuf = link_content.components().collect();
                 paths.replace_parsed_with(clean_link);

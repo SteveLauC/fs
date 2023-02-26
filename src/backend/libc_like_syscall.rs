@@ -10,14 +10,13 @@
 //! `Ok(the_num_of_bytes_read)` on success, `Err(errno_value)` on error.
 
 use libc::{
-    blkcnt64_t, blksize_t, c_char, c_int, c_long, c_uint, c_void, dev_t, gid_t,
-    ino64_t, mode_t, nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT,
-    O_RDONLY, O_TRUNC,
+    blkcnt64_t, blksize_t, c_char, c_int, c_long, c_uint, c_void, dev_t, gid_t, ino64_t, mode_t,
+    nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT, O_RDONLY, O_TRUNC,
 };
 use sc::{
     nr::{
-        CHOWN, CHROOT, CLOSE, FCHOWN, FCNTL, FSTAT, GETDENTS64, LCHOWN, LINK,
-        LSEEK, LSTAT, MKDIR, OPEN, RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
+        CHOWN, CHROOT, CLOSE, FCHOWN, FCNTL, FSTAT, GETDENTS64, LCHOWN, LINK, LSEEK, LSTAT, MKDIR,
+        OPEN, RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
     },
     syscall,
 };
@@ -27,30 +26,20 @@ use std::os::unix::io::RawFd;
 #[inline]
 fn syscall_result(ret_val: usize) -> Result<isize, c_int> {
     match ret_val as isize {
-        minus_errno if (-4095..=-1).contains(&minus_errno) => {
-            Err(-minus_errno as c_int)
-        }
+        minus_errno if (-4095..=-1).contains(&minus_errno) => Err(-minus_errno as c_int),
         success_ret_value => Ok(success_ret_value),
     }
 }
 
 #[inline]
-pub(crate) fn open(
-    pathname: *const c_char,
-    flags: c_int,
-    mode: mode_t,
-) -> Result<RawFd, c_int> {
-    let res =
-        unsafe { syscall!(OPEN, pathname as usize, flags as usize, mode) };
+pub(crate) fn open(pathname: *const c_char, flags: c_int, mode: mode_t) -> Result<RawFd, c_int> {
+    let res = unsafe { syscall!(OPEN, pathname as usize, flags as usize, mode) };
 
     syscall_result(res).map(|fd| fd as RawFd)
 }
 
 #[inline]
-pub(crate) fn creat(
-    pathname: *const c_char,
-    mode: mode_t,
-) -> Result<RawFd, c_int> {
+pub(crate) fn creat(pathname: *const c_char, mode: mode_t) -> Result<RawFd, c_int> {
     open(pathname, O_RDONLY | O_CREAT | O_TRUNC, mode)
 }
 
@@ -63,22 +52,14 @@ fn close(fd: c_int) -> Result<(), c_int> {
 }
 
 #[inline]
-pub(crate) fn read(
-    fd: c_int,
-    buf: *mut c_void,
-    count: size_t,
-) -> Result<usize, c_int> {
+pub(crate) fn read(fd: c_int, buf: *mut c_void, count: size_t) -> Result<usize, c_int> {
     let res = unsafe { syscall!(READ, fd as usize, buf as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
 
 #[inline]
-pub(crate) fn write(
-    fd: c_int,
-    buf: *const c_void,
-    count: size_t,
-) -> Result<usize, c_int> {
+pub(crate) fn write(fd: c_int, buf: *const c_void, count: size_t) -> Result<usize, c_int> {
     let res = unsafe { syscall!(WRITE, fd as usize, buf as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
@@ -91,9 +72,7 @@ pub(crate) fn pread(
     count: size_t,
     offset: off_t,
 ) -> Result<usize, c_int> {
-    let res = unsafe {
-        syscall!(PREAD64, fd as usize, buf as usize, count, offset as usize)
-    };
+    let res = unsafe { syscall!(PREAD64, fd as usize, buf as usize, count, offset as usize) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -105,18 +84,13 @@ pub(crate) fn pwrite(
     count: size_t,
     offset: off_t,
 ) -> Result<usize, c_int> {
-    let res = unsafe {
-        syscall!(PWRITE64, fd as usize, buf as usize, count, offset as usize)
-    };
+    let res = unsafe { syscall!(PWRITE64, fd as usize, buf as usize, count, offset as usize) };
 
     syscall_result(res).map(|num_written| num_written as usize)
 }
 
 #[inline]
-pub(crate) fn link(
-    oldpath: *const c_char,
-    newpath: *const c_char,
-) -> Result<(), c_int> {
+pub(crate) fn link(oldpath: *const c_char, newpath: *const c_char) -> Result<(), c_int> {
     let res = unsafe { syscall!(LINK, oldpath as usize, newpath as usize) };
 
     syscall_result(res).map(drop)
@@ -130,20 +104,14 @@ pub(crate) fn unlink(pathname: *const c_char) -> Result<(), c_int> {
 }
 
 #[inline]
-pub(crate) fn symlink(
-    target: *const c_char,
-    linkpath: *const c_char,
-) -> Result<(), c_int> {
+pub(crate) fn symlink(target: *const c_char, linkpath: *const c_char) -> Result<(), c_int> {
     let res = unsafe { syscall!(SYMLINK, target as usize, linkpath as usize) };
 
     syscall_result(res).map(drop)
 }
 
 #[inline]
-pub(crate) fn mkdir(
-    pathname: *const c_char,
-    mode: mode_t,
-) -> Result<(), c_int> {
+pub(crate) fn mkdir(pathname: *const c_char, mode: mode_t) -> Result<(), c_int> {
     let res = unsafe { syscall!(MKDIR, pathname as usize, mode as usize) };
 
     syscall_result(res).map(drop)
@@ -157,10 +125,7 @@ pub(crate) fn rmdir(pathname: *const c_char) -> Result<(), c_int> {
 }
 
 #[inline]
-pub(crate) fn rename(
-    oldpath: *const c_char,
-    newpath: *const c_char,
-) -> Result<(), c_int> {
+pub(crate) fn rename(oldpath: *const c_char, newpath: *const c_char) -> Result<(), c_int> {
     let res = unsafe { syscall!(RENAME, oldpath as usize, newpath as usize) };
 
     syscall_result(res).map(drop)
@@ -190,10 +155,7 @@ pub(crate) struct Stat {
 }
 
 #[inline]
-pub(crate) fn stat(
-    pathname: *const c_char,
-    statbuf: *mut Stat,
-) -> Result<(), c_int> {
+pub(crate) fn stat(pathname: *const c_char, statbuf: *mut Stat) -> Result<(), c_int> {
     let res = unsafe { syscall!(STAT, pathname as usize, statbuf as usize) };
 
     syscall_result(res).map(drop)
@@ -207,10 +169,7 @@ pub(crate) fn fstat(fd: c_int, statbuf: *mut Stat) -> Result<(), c_int> {
 }
 
 #[inline]
-pub(crate) fn lstat(
-    pathname: *const c_char,
-    statbuf: *mut Stat,
-) -> Result<(), c_int> {
+pub(crate) fn lstat(pathname: *const c_char, statbuf: *mut Stat) -> Result<(), c_int> {
     let res = unsafe { syscall!(LSTAT, pathname as usize, statbuf as usize) };
 
     syscall_result(res).map(drop)
@@ -274,13 +233,8 @@ pub(crate) fn statx(
 }
 
 #[inline]
-pub(crate) fn getdents64(
-    fd: c_int,
-    dirp: *mut c_void,
-    count: size_t,
-) -> Result<usize, c_int> {
-    let res =
-        unsafe { syscall!(GETDENTS64, fd as usize, dirp as usize, count) };
+pub(crate) fn getdents64(fd: c_int, dirp: *mut c_void, count: size_t) -> Result<usize, c_int> {
+    let res = unsafe { syscall!(GETDENTS64, fd as usize, dirp as usize, count) };
 
     syscall_result(res).map(|num_read| num_read as usize)
 }
@@ -293,14 +247,8 @@ pub(crate) fn chroot(path: *const c_char) -> Result<(), c_int> {
 }
 
 #[inline]
-pub(crate) fn lseek64(
-    fd: c_int,
-    offset: off64_t,
-    whence: c_int,
-) -> Result<u64, c_int> {
-    let res = unsafe {
-        syscall!(LSEEK, fd as usize, offset as usize, whence as usize)
-    };
+pub(crate) fn lseek64(fd: c_int, offset: off64_t, whence: c_int) -> Result<u64, c_int> {
+    let res = unsafe { syscall!(LSEEK, fd as usize, offset as usize, whence as usize) };
 
     syscall_result(res).map(|new_offset| new_offset as u64)
 }
@@ -311,18 +259,14 @@ pub(crate) fn readlink(
     buf: *mut c_char,
     bufsiz: size_t,
 ) -> Result<u64, c_int> {
-    let res =
-        unsafe { syscall!(READLINK, pathname as usize, buf as usize, bufsiz) };
+    let res = unsafe { syscall!(READLINK, pathname as usize, buf as usize, bufsiz) };
 
     syscall_result(res).map(|bytes_read| bytes_read as u64)
 }
 
-/// A simplified version of `fcntl(2)`, supports only two arguments
+/// A simplified version of `fcntl(2)`, supports only two arguments.
 #[inline]
-pub(crate) fn fcntl_with_two_args(
-    fd: c_int,
-    cmd: c_int,
-) -> Result<c_int, c_int> {
+pub(crate) fn fcntl_with_two_args(fd: c_int, cmd: c_int) -> Result<c_int, c_int> {
     let res = unsafe { syscall!(FCNTL, fd as usize, cmd as usize) };
 
     syscall_result(res).map(|res| res as c_int)
@@ -347,10 +291,7 @@ pub(crate) fn ftruncate(fd: c_int, length: off_t) -> Result<(), c_int> {
 }
 
 #[inline]
-pub(crate) fn chmod(
-    pathname: *const c_char,
-    mode: mode_t,
-) -> Result<(), c_int> {
+pub(crate) fn chmod(pathname: *const c_char, mode: mode_t) -> Result<(), c_int> {
     let res = unsafe { syscall!(CHMOD, pathname as usize, mode as usize) };
     syscall_result(res).map(drop)
 }
@@ -388,38 +329,20 @@ pub(crate) fn utimensat(
 }
 
 #[inline]
-pub(crate) fn chown(
-    pathname: *const c_char,
-    owner: uid_t,
-    group: gid_t,
-) -> Result<(), c_int> {
-    let res = unsafe {
-        syscall!(CHOWN, pathname as usize, owner as usize, group as usize)
-    };
+pub(crate) fn chown(pathname: *const c_char, owner: uid_t, group: gid_t) -> Result<(), c_int> {
+    let res = unsafe { syscall!(CHOWN, pathname as usize, owner as usize, group as usize) };
     syscall_result(res).map(drop)
 }
 
 #[inline]
-pub(crate) fn fchown(
-    fd: c_int,
-    owner: uid_t,
-    group: gid_t,
-) -> Result<(), c_int> {
-    let res = unsafe {
-        syscall!(FCHOWN, fd as usize, owner as usize, group as usize)
-    };
+pub(crate) fn fchown(fd: c_int, owner: uid_t, group: gid_t) -> Result<(), c_int> {
+    let res = unsafe { syscall!(FCHOWN, fd as usize, owner as usize, group as usize) };
     syscall_result(res).map(drop)
 }
 
 #[inline]
-pub(crate) fn lchown(
-    pathname: *const c_char,
-    owner: uid_t,
-    group: gid_t,
-) -> Result<(), c_int> {
-    let res = unsafe {
-        syscall!(LCHOWN, pathname as usize, owner as usize, group as usize)
-    };
+pub(crate) fn lchown(pathname: *const c_char, owner: uid_t, group: gid_t) -> Result<(), c_int> {
+    let res = unsafe { syscall!(LCHOWN, pathname as usize, owner as usize, group as usize) };
     syscall_result(res).map(drop)
 }
 
@@ -427,14 +350,13 @@ pub(crate) fn lchown(
 mod test {
     use super::*;
     use libc::{
-        BUFSIZ, EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL,
-        S_IFLNK, S_IFMT, S_IFREG,
+        BUFSIZ, EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL, S_IFLNK, S_IFMT,
+        S_IFREG,
     };
 
     #[test]
     fn test_open_close() {
-        let fd =
-            open("/proc/self/mounts\0".as_ptr().cast(), O_RDONLY, 0).unwrap();
+        let fd = open("/proc/self/mounts\0".as_ptr().cast(), O_RDONLY, 0).unwrap();
 
         close(fd).unwrap();
     }
@@ -460,11 +382,9 @@ mod test {
     #[test]
     fn test_read_write() {
         let file = "/tmp/test_read_write\0";
-        let fd_with_read_permission =
-            creat(file.as_ptr().cast(), 0o644).unwrap();
+        let fd_with_read_permission = creat(file.as_ptr().cast(), 0o644).unwrap();
 
-        let fd_with_write_permission =
-            open(file.as_ptr().cast(), O_WRONLY, 0).unwrap();
+        let fd_with_write_permission = open(file.as_ptr().cast(), O_WRONLY, 0).unwrap();
 
         let file_contents = "hello\0";
         assert_eq!(
@@ -729,12 +649,10 @@ mod test {
     fn test_ftruncate() {
         let file = "/tmp/test_ftruncate\0";
 
-        let fd_with_write_permission =
-            open(file.as_ptr().cast(), O_CREAT | O_RDWR, 0).unwrap();
+        let fd_with_write_permission = open(file.as_ptr().cast(), O_CREAT | O_RDWR, 0).unwrap();
         assert_eq!(
             5,
-            write(fd_with_write_permission, "hello\0".as_ptr().cast(), 5)
-                .unwrap()
+            write(fd_with_write_permission, "hello\0".as_ptr().cast(), 5).unwrap()
         );
         ftruncate(fd_with_write_permission, 3).unwrap();
 
@@ -799,8 +717,7 @@ mod test {
         let mut times = [Timespec::default(); 2];
         times[0].tv_nsec = libc::UTIME_OMIT;
         times[1].tv_nsec = libc::UTIME_OMIT;
-        utimensat(0, file.as_ptr().cast(), &times as *const Timespec, 0)
-            .unwrap();
+        utimensat(0, file.as_ptr().cast(), &times as *const Timespec, 0).unwrap();
 
         unlink(file.as_ptr().cast()).unwrap();
     }

@@ -50,10 +50,7 @@ pub fn create_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
 
 /// Creates a new hard link on the filesystem.
 #[inline]
-pub fn hard_link<P: AsRef<Path>, Q: AsRef<Path>>(
-    original: P,
-    link: Q,
-) -> Result<()> {
+pub fn hard_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> Result<()> {
     encapsulation::link(original.as_ref(), link.as_ref())
 }
 
@@ -69,8 +66,9 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
 }
 
 /// Returns an iterator over the entries within a directory.
+#[inline]
 pub fn read_dir<P: AsRef<Path>>(path: P) -> Result<ReadDir> {
-    unimplemented!()
+    encapsulation::Dir::opendir(path).map(|dir| ReadDir(dir))
 }
 
 /// Reads a symbolic link, returning the file that the link points to.
@@ -111,10 +109,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<()> {
 
 /// Changes the permissions found on a file or a directory.
 #[inline]
-pub fn set_permissions<P: AsRef<Path>>(
-    path: P,
-    perm: Permissions,
-) -> Result<()> {
+pub fn set_permissions<P: AsRef<Path>>(path: P, perm: Permissions) -> Result<()> {
     encapsulation::chmod(path, perm.0)
 }
 
@@ -124,42 +119,27 @@ pub fn symlink_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 }
 
 /// Write a slice as the entire contents of a file.
-pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(
-    path: P,
-    contents: C,
-) -> Result<()> {
+pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> Result<()> {
     unimplemented!()
 }
 
 /// Change the owner and group of the specified path.
 #[inline]
-pub fn chown<P: AsRef<Path>>(
-    dir: P,
-    uid: Option<u32>,
-    gid: Option<u32>,
-) -> Result<()> {
+pub fn chown<P: AsRef<Path>>(dir: P, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
     encapsulation::chown(dir, uid, gid)
 }
 
 /// Change the owner and group of the file referenced by the specified open file
 /// descriptor.
 #[inline]
-pub fn fchown<F: AsFd>(
-    fd: F,
-    uid: Option<u32>,
-    gid: Option<u32>,
-) -> Result<()> {
+pub fn fchown<F: AsFd>(fd: F, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
     encapsulation::fchown(fd, uid, gid)
 }
 
 /// Change the owner and group of the specified path, without
 /// dereferencing symbolic links.
 #[inline]
-pub fn lchown<P: AsRef<Path>>(
-    dir: P,
-    uid: Option<u32>,
-    gid: Option<u32>,
-) -> Result<()> {
+pub fn lchown<P: AsRef<Path>>(dir: P, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
     encapsulation::lchown(dir, uid, gid)
 }
 
@@ -171,9 +151,6 @@ pub fn chroot<P: AsRef<Path>>(dir: P) -> Result<()> {
 
 /// Creates a new symbolic link on the filesystem.!
 #[inline]
-pub fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
-    original: P,
-    link: Q,
-) -> Result<()> {
+pub fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> Result<()> {
     encapsulation::symlink(original, link)
 }

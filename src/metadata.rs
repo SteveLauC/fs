@@ -4,12 +4,11 @@ use crate::{
     non_fs::SystemTime,
     permissions::Permissions,
 };
+#[allow(deprecated)]
+use std::os::linux::raw::stat;
 use std::{
     io::Result,
-    os::{
-        linux::{fs::MetadataExt, raw::stat},
-        unix::fs::PermissionsExt,
-    },
+    os::{linux::fs::MetadataExt, unix::fs::PermissionsExt},
 };
 
 #[derive(Clone)]
@@ -62,6 +61,7 @@ impl Metadata {
 }
 
 impl MetadataExt for Metadata {
+    #[allow(deprecated)]
     fn as_raw_stat(&self) -> &stat {
         unimplemented!("This API is deprecated!")
     }

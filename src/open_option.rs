@@ -154,10 +154,7 @@ impl OpenOptions {
         let mut flag = Flags::from_bits(libc::O_CLOEXEC).unwrap();
         flag |= Flags::from_bits(self.get_access_mode()?).unwrap();
         flag |= Flags::from_bits(self.get_creation_mode()?).unwrap();
-        flag |= Flags::from_bits(
-            self.custom_flags as libc::c_int & !libc::O_ACCMODE,
-        )
-        .unwrap();
+        flag |= Flags::from_bits(self.custom_flags as libc::c_int & !libc::O_ACCMODE).unwrap();
 
         let fd = open(path, flag, Mode::from_bits_truncate(self.mode))?;
         Ok(File { fd })

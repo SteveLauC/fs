@@ -105,11 +105,7 @@ bitflags! {
 /// Opens a file
 ///
 /// Note: `path` should not contain byte 0, or this function will panic.
-pub(crate) fn open<P: AsRef<Path>>(
-    path: P,
-    flag: Flags,
-    mode: Mode,
-) -> Result<OwnedFd> {
+pub(crate) fn open<P: AsRef<Path>>(path: P, flag: Flags, mode: Mode) -> Result<OwnedFd> {
     let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
     let flag = flag.bits();
     let mode = mode.bits();
@@ -137,32 +133,20 @@ pub(crate) fn creat<P: AsRef<Path>>(path: P, mode: Mode) -> Result<OwnedFd> {
 pub(crate) fn read<Fd: AsFd>(fd: Fd, buf: &mut [u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
-    libc_like_syscall::read(
-        raw_fd,
-        buf.as_mut_ptr() as *mut libc::c_void,
-        buf.len(),
-    )
-    .map_err(Error::from_raw_os_error)
+    libc_like_syscall::read(raw_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
+        .map_err(Error::from_raw_os_error)
 }
 
 /// Writes to a stream
 pub(crate) fn write<Fd: AsFd>(fd: Fd, buf: &[u8]) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
 
-    libc_like_syscall::write(
-        raw_fd,
-        buf.as_ptr() as *const libc::c_void,
-        buf.len(),
-    )
-    .map_err(Error::from_raw_os_error)
+    libc_like_syscall::write(raw_fd, buf.as_ptr() as *const libc::c_void, buf.len())
+        .map_err(Error::from_raw_os_error)
 }
 
 /// Read from a file at the given offset
-pub(crate) fn pread<Fd: AsFd>(
-    fd: Fd,
-    buf: &mut [u8],
-    offset: u64,
-) -> Result<usize> {
+pub(crate) fn pread<Fd: AsFd>(fd: Fd, buf: &mut [u8], offset: u64) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
     let offset = offset as libc::off_t;
 
@@ -176,11 +160,7 @@ pub(crate) fn pread<Fd: AsFd>(
 }
 
 /// Write to a file at the given offset
-pub(crate) fn pwrite<Fd: AsFd>(
-    fd: &Fd,
-    buf: &[u8],
-    offset: u64,
-) -> Result<usize> {
+pub(crate) fn pwrite<Fd: AsFd>(fd: &Fd, buf: &[u8], offset: u64) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
     let offset = offset as libc::off_t;
 
@@ -197,41 +177,29 @@ pub(crate) fn pwrite<Fd: AsFd>(
 ///
 /// Note: `old_path` and `new_path` should not contain byte 0, or this function
 /// will panic.
-pub(crate) fn link<P: AsRef<Path>, Q: AsRef<Path>>(
-    old_path: P,
-    new_path: Q,
-) -> Result<()> {
-    let old_path =
-        CString::new(old_path.as_ref().as_os_str().as_bytes()).unwrap();
-    let new_path =
-        CString::new(new_path.as_ref().as_os_str().as_bytes()).unwrap();
+pub(crate) fn link<P: AsRef<Path>, Q: AsRef<Path>>(old_path: P, new_path: Q) -> Result<()> {
+    let old_path = CString::new(old_path.as_ref().as_os_str().as_bytes()).unwrap();
+    let new_path = CString::new(new_path.as_ref().as_os_str().as_bytes()).unwrap();
 
-    libc_like_syscall::link(old_path.as_ptr(), new_path.as_ptr())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::link(old_path.as_ptr(), new_path.as_ptr()).map_err(Error::from_raw_os_error)
 }
 
 /// Deletes a name or possibly a file it refers to
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
 pub(crate) fn unlink<P: AsRef<Path>>(path_name: P) -> Result<()> {
-    let path_name =
-        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
+    let path_name = CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
 
-    libc_like_syscall::unlink(path_name.as_ptr())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::unlink(path_name.as_ptr()).map_err(Error::from_raw_os_error)
 }
 
 /// Makes a new name for a file
 ///
 /// Note: `target` and `link_path` should not contain byte 0, or this function
 /// will panic.
-pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
-    target: P,
-    link_path: Q,
-) -> Result<()> {
+pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(target: P, link_path: Q) -> Result<()> {
     let target = CString::new(target.as_ref().as_os_str().as_bytes()).unwrap();
-    let link_path =
-        CString::new(link_path.as_ref().as_os_str().as_bytes()).unwrap();
+    let link_path = CString::new(link_path.as_ref().as_os_str().as_bytes()).unwrap();
 
     libc_like_syscall::symlink(target.as_ptr(), link_path.as_ptr())
         .map_err(Error::from_raw_os_error)
@@ -241,36 +209,27 @@ pub(crate) fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
 pub(crate) fn mkdir<P: AsRef<Path>>(path_name: P, mode: Mode) -> Result<()> {
-    let path_name =
-        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
+    let path_name = CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
 
-    libc_like_syscall::mkdir(path_name.as_ptr(), mode.bits())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::mkdir(path_name.as_ptr(), mode.bits()).map_err(Error::from_raw_os_error)
 }
 
 /// Deletes a directory
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
 pub(crate) fn rmdir<P: AsRef<Path>>(path_name: P) -> Result<()> {
-    let path_name =
-        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
+    let path_name = CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
 
-    libc_like_syscall::rmdir(path_name.as_ptr())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::rmdir(path_name.as_ptr()).map_err(Error::from_raw_os_error)
 }
 
 /// Changes the name or location of a file
 ///
 /// Note: `old_path` and `new_path` should not contain byte 0, or this function
 /// will panic.
-pub(crate) fn rename<P: AsRef<Path>, Q: AsRef<Path>>(
-    old_path: P,
-    new_path: Q,
-) -> Result<()> {
-    let old_path =
-        CString::new(old_path.as_ref().as_os_str().as_bytes()).unwrap();
-    let new_path =
-        CString::new(new_path.as_ref().as_os_str().as_bytes()).unwrap();
+pub(crate) fn rename<P: AsRef<Path>, Q: AsRef<Path>>(old_path: P, new_path: Q) -> Result<()> {
+    let old_path = CString::new(old_path.as_ref().as_os_str().as_bytes()).unwrap();
+    let new_path = CString::new(new_path.as_ref().as_os_str().as_bytes()).unwrap();
 
     libc_like_syscall::rename(old_path.as_ptr(), new_path.as_ptr())
         .map_err(Error::from_raw_os_error)
@@ -382,8 +341,7 @@ impl From<libc_like_syscall::Stat> for Stat {
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
 pub(crate) fn stat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
-    let path_name =
-        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
+    let path_name = CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
     let mut stat_buf = libc_like_syscall::Stat::default();
 
     match libc_like_syscall::stat(
@@ -399,8 +357,7 @@ pub(crate) fn stat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
 ///
 /// Note: `path_name` should not contain byte 0, or this function will panic.
 pub(crate) fn lstat<P: AsRef<Path>>(path_name: P) -> Result<Stat> {
-    let path_name =
-        CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
+    let path_name = CString::new(path_name.as_ref().as_os_str().as_bytes()).unwrap();
     let mut stat_buf = libc_like_syscall::Stat::default();
 
     match libc_like_syscall::lstat(
@@ -661,9 +618,7 @@ impl From<libc::mode_t> for FileType {
             libc::S_IFIFO => FileType::Fifo,
             libc::S_IFLNK => FileType::Symlink,
             libc::S_IFSOCK => FileType::Socket,
-            _ => unreachable!(
-                "Linux supports only 7 file types, this should not happen"
-            ),
+            _ => unreachable!("Linux supports only 7 file types, this should not happen"),
         }
     }
 }
@@ -697,10 +652,8 @@ impl Dirent {
         name_start_ptr: *const libc::c_char,
         root: &Path,
     ) -> Self {
-        let name = OsStr::from_bytes(
-            unsafe { CStr::from_ptr(name_start_ptr) }.to_bytes(),
-        )
-        .to_owned();
+        let name =
+            OsStr::from_bytes(unsafe { CStr::from_ptr(name_start_ptr) }.to_bytes()).to_owned();
         let path = root.join(name.as_os_str());
 
         Self {
@@ -713,6 +666,11 @@ impl Dirent {
 }
 
 impl Dir {
+    #[inline]
+    pub(crate) fn root(&self) -> PathBuf {
+        self.root.clone()
+    }
+
     pub(crate) fn opendir<P: AsRef<Path>>(name: P) -> Result<Dir> {
         let fd = open(
             name.as_ref(),
@@ -727,25 +685,26 @@ impl Dir {
         })
     }
 
-    pub(crate) fn readdir(&mut self) -> Result<Option<Dirent>> {
+    pub(crate) fn readdir(&mut self) -> Option<Result<Dirent>> {
         if self.entries.is_empty() {
-            let num_read = getdents64(&self.fd.as_fd(), &mut self.buf)?;
+            let num_read = match getdents64(&self.fd.as_fd(), &mut self.buf) {
+                Err(e) => return Some(Err(e)),
+                Ok(n) => n,
+            };
 
             if num_read == 0 {
-                return Ok(None);
+                return None;
             }
 
             let mut cursor = 0_usize;
             while cursor < num_read {
                 unsafe {
-                    let ptr_to_d_entry =
-                        self.buf.as_ptr().add(cursor) as *const LinuxDirent64;
+                    let ptr_to_d_entry = self.buf.as_ptr().add(cursor) as *const LinuxDirent64;
 
                     self.entries.push_back(Dirent::new(
                         (*ptr_to_d_entry).d_ino,
                         (*ptr_to_d_entry).d_type,
-                        (ptr_to_d_entry as *const libc::c_char)
-                            .add(OFFSET_D_NAME),
+                        (ptr_to_d_entry as *const libc::c_char).add(OFFSET_D_NAME),
                         self.root.as_path(),
                     ));
 
@@ -755,7 +714,7 @@ impl Dir {
         }
 
         assert!(!self.entries.is_empty());
-        Ok(self.entries.pop_front())
+        Some(Ok(self.entries.pop_front().unwrap()))
     }
 }
 
@@ -776,22 +735,16 @@ pub(crate) enum Whence {
 }
 
 /// reposition read/write file offset
-pub(crate) fn lseek64<Fd: AsFd>(
-    fd: Fd,
-    offset: i64,
-    whence: Whence,
-) -> Result<u64> {
+pub(crate) fn lseek64<Fd: AsFd>(fd: Fd, offset: i64, whence: Whence) -> Result<u64> {
     let raw_fd = fd.as_fd().as_raw_fd();
     let whence = whence as libc::c_int;
 
-    libc_like_syscall::lseek64(raw_fd, offset, whence)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::lseek64(raw_fd, offset, whence).map_err(Error::from_raw_os_error)
 }
 
 /// Read value of a symbolic link
 pub(crate) fn readlink<P: AsRef<Path>>(pathname: P) -> Result<PathBuf> {
-    let pathname =
-        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    let pathname = CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
     let mut buf: Vec<u8> = Vec::with_capacity(libc::PATH_MAX as usize);
 
     let bytes_read = libc_like_syscall::readlink(
@@ -808,7 +761,8 @@ pub(crate) fn readlink<P: AsRef<Path>>(pathname: P) -> Result<PathBuf> {
     Ok(PathBuf::from(OsString::from_vec(buf)))
 }
 
-/// A simplified version of `fcntl(2)`, supports only two arguments
+/// A simplified version of `fcntl(2)`, supports only two arguments.
+//
 // Currently, this will be only used in the `Debug` implementation for `File`,
 // so this simple wrapper would suffice.
 pub(crate) use libc_like_syscall::fcntl_with_two_args;
@@ -817,15 +771,13 @@ pub(crate) use libc_like_syscall::fcntl_with_two_args;
 /// cache pages for) the file referred to by the file descriptor fd to the
 /// disk device
 pub(crate) fn fsync<Fd: AsFd>(fd: Fd) -> Result<()> {
-    libc_like_syscall::fsync(fd.as_fd().as_raw_fd())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::fsync(fd.as_fd().as_raw_fd()).map_err(Error::from_raw_os_error)
 }
 /// `fdatasync()` is similar to [`fsync()`], but does not flush modified metadata
 /// unless that metadata  is needed in order to allow a subsequent data retrieval
 /// to be correctly handled
 pub(crate) fn fdatasync<Fd: AsFd>(fd: Fd) -> Result<()> {
-    libc_like_syscall::fdatasync(fd.as_fd().as_raw_fd())
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::fdatasync(fd.as_fd().as_raw_fd()).map_err(Error::from_raw_os_error)
 }
 
 /// Truncate a file to a specified length
@@ -838,24 +790,20 @@ pub(crate) fn ftruncate<Fd: AsFd>(fd: Fd, length: u64) -> Result<()> {
         .try_into()
         .map_err(|e| Error::new(ErrorKind::InvalidInput, e))?;
 
-    libc_like_syscall::ftruncate(fd.as_fd().as_raw_fd(), length)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::ftruncate(fd.as_fd().as_raw_fd(), length).map_err(Error::from_raw_os_error)
 }
 
 /// Changes permissions of a file
 pub(crate) fn chmod<P: AsRef<Path>>(pathname: P, mode: Mode) -> Result<()> {
-    let pathname =
-        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    let pathname = CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
     let mode = mode.bits();
-    libc_like_syscall::chmod(pathname.as_ptr(), mode)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::chmod(pathname.as_ptr(), mode).map_err(Error::from_raw_os_error)
 }
 
 /// Changes permissions of a file
 pub(crate) fn fchmod<Fd: AsFd>(fd: Fd, mode: Mode) -> Result<()> {
     let mode = mode.bits();
-    libc_like_syscall::fchmod(fd.as_fd().as_raw_fd(), mode)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::fchmod(fd.as_fd().as_raw_fd(), mode).map_err(Error::from_raw_os_error)
 }
 
 /// Time operation used in [`futimens()`].
@@ -894,7 +842,7 @@ pub(crate) fn futimens<Fd: AsFd>(
     mtime: &TimestampSpec,
 ) -> Result<()> {
     // atime and mtime
-    let mut times = [atime.into(), mtime.into()];
+    let times = [atime.into(), mtime.into()];
 
     libc_like_syscall::utimensat(
         fd.as_fd().as_raw_fd(),
@@ -911,27 +859,20 @@ pub(crate) fn chown<P: AsRef<Path>>(
     owner: Option<u32>,
     group: Option<u32>,
 ) -> Result<()> {
-    let pathname =
-        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    let pathname = CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
     // libc::uid_t and libc::gid_t are unsigned number, -1 = MAX
     let owner = owner.unwrap_or(u32::MAX);
     let group = group.unwrap_or(u32::MAX);
 
-    libc_like_syscall::chown(pathname.as_ptr(), owner, group)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::chown(pathname.as_ptr(), owner, group).map_err(Error::from_raw_os_error)
 }
 
 /// Change ownership of the file that are specified by the open file descriptor `fd`
-pub(crate) fn fchown<Fd: AsFd>(
-    fd: Fd,
-    owner: Option<u32>,
-    group: Option<u32>,
-) -> Result<()> {
+pub(crate) fn fchown<Fd: AsFd>(fd: Fd, owner: Option<u32>, group: Option<u32>) -> Result<()> {
     let fd = fd.as_fd().as_raw_fd();
     let owner = owner.unwrap_or(u32::MAX);
     let group = group.unwrap_or(u32::MAX);
-    libc_like_syscall::fchown(fd, owner, group)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::fchown(fd, owner, group).map_err(Error::from_raw_os_error)
 }
 
 /// Change ownership of a file
@@ -943,14 +884,12 @@ pub(crate) fn lchown<P: AsRef<Path>>(
     owner: Option<u32>,
     group: Option<u32>,
 ) -> Result<()> {
-    let pathname =
-        CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
+    let pathname = CString::new(pathname.as_ref().as_os_str().as_bytes()).unwrap();
     // libc::uid_t and libc::gid_t are unsigned number, -1 = MAX
     let owner = owner.unwrap_or(u32::MAX);
     let group = group.unwrap_or(u32::MAX);
 
-    libc_like_syscall::lchown(pathname.as_ptr(), owner, group)
-        .map_err(Error::from_raw_os_error)
+    libc_like_syscall::lchown(pathname.as_ptr(), owner, group).map_err(Error::from_raw_os_error)
 }
 
 #[cfg(test)]
@@ -974,10 +913,8 @@ mod test {
     #[test]
     fn test_read_write() {
         let file = "/tmp/test_read_write";
-        let fd_with_read_permission =
-            creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
-        let fd_with_write_permission =
-            open(file, Flags::O_WRONLY, Mode::empty()).unwrap();
+        let fd_with_read_permission = creat(file, Mode::from_bits(0o644).unwrap()).unwrap();
+        let fd_with_write_permission = open(file, Flags::O_WRONLY, Mode::empty()).unwrap();
         assert_eq!(
             write(&fd_with_write_permission.as_fd(), b"hello").unwrap(),
             5
@@ -1155,8 +1092,7 @@ mod test {
             .output()
             .unwrap();
         assert!(output.stderr.is_empty());
-        let num_of_file =
-            output.stdout.iter().filter(|&&b| b == b'\n').count() - 1;
+        let num_of_file = output.stdout.iter().filter(|&&b| b == b'\n').count() - 1;
 
         let mut dir = Dir::opendir("/").unwrap();
         let mut n_files = 0;
@@ -1302,8 +1238,7 @@ mod test {
         )
         .unwrap();
 
-        futimens(&fd.as_fd(), &TimestampSpec::Omit, &TimestampSpec::Omit)
-            .unwrap();
+        futimens(&fd.as_fd(), &TimestampSpec::Omit, &TimestampSpec::Omit).unwrap();
         unlink(file).unwrap();
     }
 

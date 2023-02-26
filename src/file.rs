@@ -1,14 +1,14 @@
-use crate::backend::encapsulation::TimestampSpec;
 use crate::{
-    backend::encapsulation, filetimes::FileTimes, functions::read_link,
-    metadata::Metadata, non_fs::SystemTime, open_option::OpenOptions,
-    permissions::Permissions,
+    backend::encapsulation, filetimes::FileTimes, functions::read_link, metadata::Metadata,
+    non_fs::SystemTime, open_option::OpenOptions, permissions::Permissions,
 };
-use std::os::fd::AsFd;
 use std::{
     fmt::{self, Debug, Formatter},
     io::Result,
-    os::unix::io::{AsRawFd, OwnedFd},
+    os::{
+        fd::AsFd,
+        unix::io::{AsRawFd, OwnedFd},
+    },
     path::{Path, PathBuf},
 };
 
@@ -99,8 +99,8 @@ impl File {
     pub fn set_times(&self, times: FileTimes) -> Result<()> {
         encapsulation::futimens(
             &self.fd.as_fd(),
-            &TimestampSpec::Set(times.0[0]),
-            &TimestampSpec::Set(times.0[1]),
+            &encapsulation::TimestampSpec::Set(times.0[0]),
+            &encapsulation::TimestampSpec::Set(times.0[1]),
         )
     }
 
