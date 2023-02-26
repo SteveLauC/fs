@@ -1096,7 +1096,7 @@ mod test {
 
         let mut dir = Dir::opendir("/").unwrap();
         let mut n_files = 0;
-        while let Ok(Some(_)) = dir.readdir() {
+        while let Some(Ok(_)) = dir.readdir() {
             n_files += 1;
         }
 
