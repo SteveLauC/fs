@@ -604,7 +604,7 @@ mod test {
         symlink(file.as_ptr().cast(), soft_link.as_ptr().cast()).unwrap();
 
         let buf = [0; 19];
-        let bytes_read = readlink(
+        readlink(
             soft_link.as_ptr().cast(),
             buf.as_ptr().cast_mut().cast(),
             20,

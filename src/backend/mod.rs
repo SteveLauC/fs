@@ -6,7 +6,6 @@
 //! 3. Some library functions
 
 #[allow(unused)]
-
 pub(crate) mod encapsulation;
 mod libc_like_syscall;
 pub(crate) mod major_minor;
