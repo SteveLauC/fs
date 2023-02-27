@@ -4,12 +4,16 @@ use crate::{
 };
 use std::{
     fmt::{self, Debug, Formatter},
-    io::Result,
+    io::{Read, Result, Seek, SeekFrom, Write},
     os::{
-        fd::AsFd,
-        unix::io::{AsRawFd, OwnedFd},
+        fd::{BorrowedFd, FromRawFd, IntoRawFd, RawFd},
+        unix::{
+            fs::FileExt,
+            io::{AsFd, AsRawFd, OwnedFd},
+        },
     },
     path::{Path, PathBuf},
+    process::Stdio,
 };
 
 pub struct File {
@@ -144,5 +148,103 @@ impl Debug for File {
             b.field("read", &read).field("write", &write);
         }
         b.finish()
+    }
+}
+
+impl AsFd for File {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
+    }
+}
+
+impl AsRawFd for File {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl FileExt for File {
+    fn read_at(&self, buf: &mut [u8], offset: u64) -> Result<usize> {
+        encapsulation::pread(self, buf, offset)
+    }
+
+    fn write_at(&self, buf: &[u8], offset: u64) -> Result<usize> {
+        encapsulation::pwrite(self, buf, offset)
+    }
+}
+
+impl From<File> for OwnedFd {
+    fn from(value: File) -> Self {
+        value.fd
+    }
+}
+
+impl From<File> for Stdio {
+    fn from(value: File) -> Self {
+        Stdio::from(value.fd)
+    }
+}
+
+impl From<OwnedFd> for File {
+    fn from(value: OwnedFd) -> Self {
+        Self { fd: value }
+    }
+}
+
+impl FromRawFd for File {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self {
+            fd: OwnedFd::from_raw_fd(fd),
+        }
+    }
+}
+
+impl IntoRawFd for File {
+    fn into_raw_fd(self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl Read for File {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        encapsulation::read(self, buf)
+    }
+}
+
+impl Read for &File {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        encapsulation::read(self, buf)
+    }
+}
+
+impl Write for File {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        encapsulation::write(self, buf)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Write for &File {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        encapsulation::write(self, buf)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Seek for File {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        let (whence, offset) = match pos {
+            SeekFrom::Current(offset) => (encapsulation::Whence::Cur, offset),
+            SeekFrom::Start(offset) => (encapsulation::Whence::Set, offset as i64),
+            SeekFrom::End(offset) => (encapsulation::Whence::End, offset),
+        };
+
+        encapsulation::lseek64(self, offset, whence)
     }
 }

@@ -13,13 +13,7 @@ use libc::{
     blkcnt64_t, blksize_t, c_char, c_int, c_long, c_uint, c_void, dev_t, gid_t, ino64_t, mode_t,
     nlink_t, off64_t, off_t, size_t, time_t, uid_t, O_CREAT, O_RDONLY, O_TRUNC,
 };
-use sc::{
-    nr::{
-        CHOWN, CHROOT, CLOSE, FCHOWN, FCNTL, FSTAT, GETDENTS64, LCHOWN, LINK, LSEEK, LSTAT, MKDIR,
-        OPEN, RENAME, RMDIR, STAT, SYMLINK, UNLINK, WRITE,
-    },
-    syscall,
-};
+use sc::syscall;
 use std::os::unix::io::RawFd;
 
 /// A helper function to handle the return value of a raw syscall
@@ -45,6 +39,7 @@ pub(crate) fn creat(pathname: *const c_char, mode: mode_t) -> Result<RawFd, c_in
 
 // Only used in test.
 #[inline]
+#[cfg(test)]
 fn close(fd: c_int) -> Result<(), c_int> {
     let res = unsafe { syscall!(CLOSE, fd as usize) };
 
@@ -350,8 +345,7 @@ pub(crate) fn lchown(pathname: *const c_char, owner: uid_t, group: gid_t) -> Res
 mod test {
     use super::*;
     use libc::{
-        BUFSIZ, EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL, S_IFLNK, S_IFMT,
-        S_IFREG,
+        EISDIR, ENOENT, ENOTDIR, O_RDWR, O_WRONLY, SEEK_SET, STATX_ALL, S_IFLNK, S_IFMT, S_IFREG,
     };
 
     #[test]

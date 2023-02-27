@@ -5,6 +5,8 @@
 //! 2. Rusty encapsulations for those libc-like syscalls.
 //! 3. Some library functions
 
+#[allow(unused)]
+
 pub(crate) mod encapsulation;
 mod libc_like_syscall;
 pub(crate) mod major_minor;

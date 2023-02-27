@@ -4,11 +4,12 @@ use crate::{
     backend::{encapsulation, realpath::realpath},
     dir::ReadDir,
     dirbuilder::DirBuilder,
+    file::File,
     metadata::Metadata,
     permissions::Permissions,
 };
 use std::{
-    io::{ErrorKind, Result},
+    io::{ErrorKind, Read, Result, Write},
     os::unix::io::AsFd,
     path::{Path, PathBuf},
 };
@@ -31,7 +32,7 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 
 /// Copies the contents of one file to another. This function will also copy
 /// the permission bits of the original file to the destination file.
-pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<u64> {
+pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(_from: P, _to: Q) -> Result<u64> {
     unimplemented!()
 }
 
@@ -62,7 +63,10 @@ pub fn metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 
 /// Read the entire contents of a file into a bytes vector.
 pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
-    unimplemented!()
+    let mut file = File::open(path)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Returns an iterator over the entries within a directory.
@@ -79,7 +83,10 @@ pub fn read_link<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 
 /// read_to_string: Read the entire contents of a file into a string.
 pub fn read_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
-    unimplemented!()
+    let mut file = File::open(path)?;
+    let mut string = String::new();
+    file.read_to_string(&mut string)?;
+    Ok(string)
 }
 
 /// Removes an empty directory.
@@ -90,7 +97,7 @@ pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
 
 /// Removes a directory at this path, after removing all its contents. Use
 /// carefully!
-pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
+pub fn remove_dir_all<P: AsRef<Path>>(_path: P) -> Result<()> {
     unimplemented!()
 }
 
@@ -120,7 +127,7 @@ pub fn symlink_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 
 /// Write a slice as the entire contents of a file.
 pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> Result<()> {
-    unimplemented!()
+    File::create(path)?.write_all(contents.as_ref())
 }
 
 /// Change the owner and group of the specified path.
