@@ -11,3 +11,4 @@ libc = "0.2.137"
 sc = "0.2.7"
 
 [dev-dependencies]
+nix = "0.26.2"

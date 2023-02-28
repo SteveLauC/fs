@@ -146,3 +146,32 @@ impl MetadataExt for Metadata {
         self.0.blocks()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::File;
+
+    #[test]
+    fn metadata_ext() {
+        let stat = nix::sys::stat::stat("Cargo.toml").unwrap();
+        let metadata = File::open("Cargo.toml").unwrap().metadata().unwrap();
+
+        assert_eq!(stat.st_dev, metadata.st_dev());
+        assert_eq!(stat.st_ino, metadata.st_ino());
+        assert_eq!(stat.st_mode, metadata.st_mode());
+        assert_eq!(stat.st_nlink, metadata.st_nlink());
+        assert_eq!(stat.st_uid, metadata.st_uid());
+        assert_eq!(stat.st_gid, metadata.st_gid());
+        assert_eq!(stat.st_rdev, metadata.st_rdev());
+        assert_eq!(stat.st_size as u64, metadata.st_size());
+        assert_eq!(stat.st_atime, metadata.st_atime());
+        assert_eq!(stat.st_atime_nsec, metadata.st_atime_nsec());
+        assert_eq!(stat.st_mtime, metadata.st_mtime());
+        assert_eq!(stat.st_mtime_nsec, metadata.st_mtime_nsec());
+        assert_eq!(stat.st_ctime, metadata.st_ctime());
+        assert_eq!(stat.st_ctime_nsec, metadata.st_ctime_nsec());
+        assert_eq!(stat.st_blksize as u64, metadata.st_blksize());
+        assert_eq!(stat.st_blocks as u64, metadata.st_blocks());
+    }
+}

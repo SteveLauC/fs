@@ -248,3 +248,118 @@ impl Seek for File {
         encapsulation::lseek64(self, offset, whence)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::io::ErrorKind;
+
+    #[test]
+    fn open() {
+        let _file = File::open("Cargo.toml").unwrap();
+    }
+
+    #[test]
+    fn create() {
+        let name = "file_create";
+        let _file = File::create(name).unwrap();
+
+        crate::functions::remove_file(name).unwrap();
+    }
+
+    #[test]
+    fn create_new_already_exists() {
+        let err = File::create_new("Cargo.toml").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    fn metadata() {
+        let cargo_toml = File::open("Cargo.toml").unwrap();
+        let metadata = cargo_toml.metadata().unwrap();
+
+        assert!(metadata.is_file());
+        assert!(!metadata.is_dir());
+        assert!(!metadata.is_symlink());
+    }
+
+    #[test]
+    fn try_clone() {
+        let file = File::open("Cargo.toml").unwrap();
+        let another_file = file.try_clone().unwrap();
+
+        assert_ne!(file.as_raw_fd(), another_file.as_raw_fd());
+    }
+
+    #[test]
+    fn sync_data() {
+        let name = "file_sync_data";
+        let mut file = File::create_new(name).unwrap();
+        file.write(b"hello").unwrap();
+        file.sync_data().unwrap();
+
+        crate::functions::remove_file(name).unwrap();
+    }
+
+    #[test]
+    fn sync_all() {
+        let name = "file_sync_all";
+        let mut file = File::create_new(name).unwrap();
+        file.write(b"hello").unwrap();
+        file.sync_data().unwrap();
+
+        crate::functions::remove_file(name).unwrap();
+    }
+
+    #[test]
+    fn set_len() {
+        let name = "file_set_len";
+        const SIZE: u64 = 5;
+
+        let mut file = File::create_new(name).unwrap();
+        file.write(b"hello world").unwrap();
+        assert_eq!(file.metadata().unwrap().len(), 11);
+
+        file.set_len(SIZE).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), SIZE);
+        let mut buf = [0_u8; SIZE as usize];
+        assert_eq!(file.read_at(&mut buf, 0).unwrap(), SIZE as usize);
+        assert_eq!(buf, "hello".as_bytes());
+
+        crate::functions::remove_file(name).unwrap();
+    }
+
+    #[test]
+    fn set_permission() {
+        let name = "file_set_permission";
+
+        let file = File::create_new(name).unwrap();
+        let mut perm = file.metadata().unwrap().permission();
+
+        assert!(!perm.readonly());
+        perm.set_readonly(true);
+
+        file.set_permissions(perm).unwrap();
+
+        perm = file.metadata().unwrap().permission();
+        assert!(perm.readonly());
+
+        crate::functions::remove_file(name).unwrap();
+    }
+
+    #[test]
+    fn set_times() {
+        let name = "file_set_times";
+
+        let file = File::create_new(name).unwrap();
+        let file_times = FileTimes::new();
+        file.set_times(file_times).unwrap();
+
+        let atime = file.metadata().unwrap().accessed().unwrap();
+        let mtime = file.metadata().unwrap().modified().unwrap();
+        assert_eq!(atime, SystemTime::default());
+        assert_eq!(mtime, SystemTime::default());
+
+        crate::functions::remove_file(name).unwrap();
+    }
+}

@@ -82,3 +82,43 @@ impl DirBuilderExt for DirBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::os::{linux::fs::MetadataExt, unix::fs::DirBuilderExt};
+
+    /// Get the umask used by the underlying file system.
+    #[inline]
+    fn get_umask() -> u32 {
+        let umask = nix::sys::stat::umask(nix::sys::stat::Mode::from_bits(0o22).unwrap());
+        nix::sys::stat::umask(umask);
+        umask.bits()
+    }
+
+    #[test]
+    fn mode() {
+        let mode = 0o666_u32;
+        DirBuilder::new().mode(mode).create("dir").unwrap();
+        let umask = get_umask();
+        let actual_mode = mode & !umask;
+
+        let dir_metadata = crate::functions::metadata("dir").unwrap();
+        assert!(dir_metadata.is_dir());
+        assert_eq!(dir_metadata.st_mode() & (0o777), actual_mode);
+
+        crate::functions::remove_dir("dir").unwrap();
+    }
+
+    #[test]
+    fn recursive() {
+        DirBuilder::new()
+            .recursive(true)
+            .create("dir1/dir2/dir3")
+            .unwrap();
+
+        crate::functions::remove_dir("dir1/dir2/dir3").unwrap();
+        crate::functions::remove_dir("dir1/dir2").unwrap();
+        crate::functions::remove_dir("dir1").unwrap();
+    }
+}

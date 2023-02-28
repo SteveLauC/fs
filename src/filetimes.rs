@@ -20,3 +20,24 @@ impl FileTimes {
         self
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn set_accessed() {
+        let mut file_times = FileTimes::new();
+        file_times = file_times.set_accessed(SystemTime::new(1, 2));
+        assert_eq!(file_times.0[0].sec, 1);
+        assert_eq!(file_times.0[0].nsec, 2);
+    }
+
+    #[test]
+    fn set_modified() {
+        let mut file_times = FileTimes::new();
+        file_times = file_times.set_modified(SystemTime::new(1, 2));
+        assert_eq!(file_times.0[1].sec, 1);
+        assert_eq!(file_times.0[1].nsec, 2);
+    }
+}

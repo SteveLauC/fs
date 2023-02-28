@@ -33,7 +33,8 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 /// Copies the contents of one file to another. This function will also copy
 /// the permission bits of the original file to the destination file.
 pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(_from: P, _to: Q) -> Result<u64> {
-    unimplemented!()
+    // TODO(SteveLauC)
+    todo!()
 }
 
 /// create_dir: Creates a new, empty directory at the provided path
@@ -98,7 +99,8 @@ pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
 /// Removes a directory at this path, after removing all its contents. Use
 /// carefully!
 pub fn remove_dir_all<P: AsRef<Path>>(_path: P) -> Result<()> {
-    unimplemented!()
+    // TODO(SteveLauC)
+    todo!()
 }
 
 /// Removes a file from the filesystem.

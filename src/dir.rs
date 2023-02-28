@@ -73,7 +73,7 @@ impl DirEntry {
     }
 }
 
-impl fmt::Debug for DirEntry {
+impl Debug for DirEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("DirEntry").field(&self.path()).finish()
     }
@@ -83,5 +83,22 @@ impl DirEntryExt for DirEntry {
     #[inline]
     fn ino(&self) -> u64 {
         self.0.ino
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn iterating_over_root() {
+        let output = std::process::Command::new("ls")
+            .args(["-al", "/"])
+            .output()
+            .unwrap();
+        assert!(output.stderr.is_empty());
+        let num_of_file = output.stdout.iter().filter(|&&b| b == b'\n').count() - 1;
+
+        let dir = crate::read_dir("/").unwrap();
+        let n_files = dir.into_iter().count();
+        assert_eq!(num_of_file, n_files);
     }
 }
