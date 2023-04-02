@@ -701,20 +701,28 @@ impl Dir {
                 unsafe {
                     let ptr_to_d_entry = self.buf.as_ptr().add(cursor) as *const LinuxDirent64;
 
-                    self.entries.push_back(Dirent::new(
+                    let entry = Dirent::new(
                         (*ptr_to_d_entry).d_ino,
                         (*ptr_to_d_entry).d_type,
                         (ptr_to_d_entry as *const libc::c_char).add(OFFSET_D_NAME),
                         self.root.as_path(),
-                    ));
+                    );
+
+                    // skip "." and ".."
+                    if entry.name != "." && entry.name != ".." {
+                        self.entries.push_back(entry);
+                    }
 
                     cursor += (*ptr_to_d_entry).d_reclen as usize;
                 }
             }
         }
 
-        assert!(!self.entries.is_empty());
-        Some(Ok(self.entries.pop_front().unwrap()))
+        if let Some(entry) = self.entries.pop_front() {
+            Some(Ok(entry)) 
+        } else {
+            None
+        }
     }
 }
 
@@ -1099,6 +1107,9 @@ mod test {
         while let Some(Ok(_)) = dir.readdir() {
             n_files += 1;
         }
+
+        // add "." and ".."
+        n_files += 2;
 
         assert_eq!(num_of_file, n_files);
     }

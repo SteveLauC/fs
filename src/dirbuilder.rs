@@ -5,6 +5,7 @@ use std::{
     path::Path,
 };
 
+/// A builder used to create directories in various manners.
 #[derive(Debug)]
 pub struct DirBuilder {
     mode: Mode,

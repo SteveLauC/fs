@@ -12,3 +12,4 @@ sc = "0.2.7"
 
 [dev-dependencies]
 nix = "0.26.2"
+tempdir = "0.3.7"

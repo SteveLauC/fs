@@ -42,6 +42,10 @@ impl Iterator for ReadDir {
 pub struct DirEntry(pub(crate) encapsulation::Dirent);
 
 impl DirEntry {
+    /// Returns the full path to the file that this entry represents.
+    ///
+    /// The full path is created by joining the original path to `read_dir` with 
+    /// the filename of this entry.
     #[inline]
     pub fn path(&self) -> PathBuf {
         self.0.path.clone()
@@ -88,6 +92,8 @@ impl DirEntryExt for DirEntry {
 
 #[cfg(test)]
 mod test {
+    use tempdir::TempDir;
+
     #[test]
     fn iterating_over_root() {
         let output = std::process::Command::new("ls")
@@ -98,7 +104,21 @@ mod test {
         let num_of_file = output.stdout.iter().filter(|&&b| b == b'\n').count() - 1;
 
         let dir = crate::read_dir("/").unwrap();
-        let n_files = dir.into_iter().count();
+        let mut n_files = dir.into_iter().count();
+        // add "." and ".."
+        n_files += 2;
         assert_eq!(num_of_file, n_files);
+    }
+
+    #[test]
+    fn empty_dir() {
+        let temp_dir =TempDir::new("test_empty_dir").unwrap();
+        let temp_dir_path = temp_dir.path();
+
+        let mut dir = crate::functions::read_dir(temp_dir_path).unwrap();
+        let none = dir.next();
+
+        assert!(none.is_none());
+
     }
 }

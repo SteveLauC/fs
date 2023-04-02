@@ -1,5 +1,6 @@
 use crate::non_fs::SystemTime;
 
+/// Representation of the various timestamps on a file.
 #[derive(Copy, Clone, Debug, Default)]
 pub struct FileTimes(pub(crate) [SystemTime; 2]);
 
