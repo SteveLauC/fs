@@ -33,7 +33,6 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 /// Copies the contents of one file to another. This function will also copy
 /// the permission bits of the original file to the destination file.
 pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(_from: P, _to: Q) -> Result<u64> {
-    // TODO(SteveLauC)
     todo!()
 }
 

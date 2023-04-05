@@ -341,6 +341,29 @@ pub(crate) fn lchown(pathname: *const c_char, owner: uid_t, group: gid_t) -> Res
     syscall_result(res).map(drop)
 }
 
+#[inline]
+pub(crate) fn copy_file_range(
+    fd_in: c_int,
+    off_in: *mut off64_t,
+    fd_out: c_int,
+    off_out: *mut off64_t,
+    len: size_t,
+) -> Result<usize, c_int> {
+    let res = unsafe {
+        syscall!(
+            COPY_FILE_RANGE,
+            fd_in as usize,
+            off_in as usize,
+            fd_out as usize,
+            off_out as usize,
+            len as usize,
+            0 // flag argument is for future extension, and should be set to 0 for now.
+        )
+    };
+
+    syscall_result(res).map(|num_read| num_read as usize)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -796,5 +819,41 @@ mod test {
         lchown(link.as_ptr().cast(), uid, gid).unwrap_err();
 
         unlink(file.as_ptr().cast()).unwrap();
+    }
+
+    #[test]
+    fn test_copy_file_range() {
+        let source = "/tmp/test_copy_file_range_source\0";
+        let des = "/tmp/test_copy_file_range_des\0";
+
+        let source_file = open(source.as_ptr().cast(), O_RDWR | O_CREAT, 0o644).unwrap();
+        let des_file = open(des.as_ptr().cast(), O_RDWR | O_CREAT, 0o644).unwrap();
+        let file_contents = "helloworld\0";
+        assert_eq!(
+            write(source_file, file_contents.as_ptr().cast(), 10).unwrap(),
+            10
+        );
+
+        let mut stat_buf = Stat::default();
+        stat(source.as_ptr().cast(), &mut stat_buf as *mut Stat).unwrap();
+        let source_file_len = stat_buf.st_size;
+        assert_eq!(source_file_len, 10);
+        let mut offset_in: off64_t = 0;
+        let mut offset_out: off64_t = 0;
+        copy_file_range(
+            source_file,
+            &mut offset_in as *mut off64_t,
+            des_file,
+            &mut offset_out as *mut off64_t,
+            source_file_len as _,
+        )
+        .unwrap();
+
+        let mut buf = [0_u8; 10];
+        assert_eq!(read(des_file, buf.as_mut_ptr().cast(), 10).unwrap(), 10);
+        assert_eq!(buf, "helloworld".as_bytes());
+
+        unlink(source.as_ptr().cast()).unwrap();
+        unlink(des.as_ptr().cast()).unwrap();
     }
 }

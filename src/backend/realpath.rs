@@ -64,20 +64,8 @@ impl RealpathParser {
     }
 
     #[inline]
-    fn remained_next_entry(&mut self) -> Option<OsString> {
+    fn remaining_next_entry(&mut self) -> Option<OsString> {
         self.remaining.pop_front()
-    }
-
-    #[inline]
-    fn remained_push_front<P: AsRef<Path>>(&mut self, entry: P) {
-        entry
-            .as_ref()
-            .components()
-            .rev()
-            .map(|com| com.as_os_str().to_owned())
-            .for_each(|item| {
-                self.remaining.push_front(item);
-            });
     }
 }
 
@@ -103,7 +91,7 @@ pub(crate) fn realpath<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
         Some(path),
     );
 
-    while let Some(entry) = parser.remained_next_entry() {
+    while let Some(entry) = parser.remaining_next_entry() {
         // Check the `parsed` part exists before we proceed
         if parser.parsed.try_exists()? == false {
             return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
@@ -118,14 +106,17 @@ pub(crate) fn realpath<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
         }
 
         if parser.parsed.is_symlink() {
-            let link_content = parser.parsed.read_link().expect("can not follow symlink");
-            if link_content.is_absolute() {
-                let clean_link: PathBuf = link_content.components().collect();
-                parser.replace_parsed_with(clean_link);
-            } else {
-                parser.parsed_cd_to_parent();
-                parser.remained_push_front(link_content);
+            let mut link_content = parser.parsed.read_link().expect("can not follow symlink");
+            if link_content.is_relative() {
+                // A relative symlink is relative to the parent directory of that link.
+                link_content = parser
+                    .parsed
+                    .parent()
+                    .expect("must have a parent")
+                    .join(link_content);
             }
+            // A symlink can be literally anything, should also be parsed.
+            parser.replace_parsed_with(realpath(link_content)?);
         }
     }
 
@@ -137,7 +128,8 @@ mod test {
     use super::realpath;
     use std::{
         env::current_dir,
-        fs::{create_dir, create_dir_all, remove_dir, remove_dir_all},
+        fs::{create_dir, create_dir_all, remove_dir, remove_dir_all, remove_file, File},
+        os::unix::fs::symlink,
         path::Path,
     };
 
@@ -186,5 +178,20 @@ mod test {
 
         remove_dir("test5").unwrap();
         remove_dir("path").unwrap();
+    }
+
+    #[test]
+    fn test_symlink() {
+        File::create("source").unwrap();
+        symlink("source", "link").unwrap();
+
+        let mut cwd = current_dir().expect("can not get cwd");
+        cwd.push("source");
+        let parsed = realpath("link").unwrap();
+
+        assert_eq!(parsed, cwd);
+
+        remove_file("source").unwrap();
+        remove_file("link").unwrap();
     }
 }

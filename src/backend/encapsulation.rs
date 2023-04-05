@@ -15,6 +15,7 @@ use std::{
         io::{AsFd, AsRawFd, FromRawFd, OwnedFd},
     },
     path::{Path, PathBuf},
+    ptr::null_mut,
 };
 
 bitflags! {
@@ -900,10 +901,43 @@ pub(crate) fn lchown<P: AsRef<Path>>(
     libc_like_syscall::lchown(pathname.as_ptr(), owner, group).map_err(Error::from_raw_os_error)
 }
 
+/// Copy a range of data from one file to another file.
+///
+/// # Offset
+/// When `off_in` (or `off_out`) is set to `None`, then the offset of that file
+/// will be used, or the offset in `Some(offset)` will be used instead.
+pub(crate) fn copy_file_range<F: AsFd>(
+    file_in: F,
+    mut off_in: Option<usize>,
+    file_out: F,
+    mut off_out: Option<usize>,
+    len: usize,
+) -> Result<usize> {
+    let off_in: *mut libc::off64_t = if let Some(off) = off_in.as_mut() {
+        (off as *mut usize).cast()
+    } else {
+        null_mut()
+    };
+    let off_out: *mut libc::off64_t = if let Some(off) = off_out.as_mut() {
+        (off as *mut usize).cast()
+    } else {
+        null_mut()
+    };
+
+    libc_like_syscall::copy_file_range(
+        file_in.as_fd().as_raw_fd(),
+        off_in,
+        file_out.as_fd().as_raw_fd(),
+        off_out,
+        len,
+    )
+    .map_err(Error::from_raw_os_error)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::os::fd::BorrowedFd;
+    use std::{fs::metadata, os::fd::BorrowedFd};
 
     #[test]
     fn test_open() {
@@ -1366,5 +1400,43 @@ mod test {
         unlink(file).unwrap();
         unlink(link).unwrap();
         lchown(link, uid, gid).unwrap_err();
+    }
+
+    #[test]
+    fn test_copy_file_range() {
+        let source = "/tmp/test_copy_file_range_source_encap";
+        let des = "/tmp/test_copy_file_range_des_encap";
+
+        let source_file = open(
+            source,
+            Flags::O_RDWR | Flags::O_CREAT,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+        let des_file = open(
+            des,
+            Flags::O_RDWR | Flags::O_CREAT,
+            Mode::from_bits(0o644).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(10, write(&source_file, b"helloworld").unwrap());
+        let source_file_len = metadata(source).unwrap().len();
+        assert_eq!(
+            10,
+            copy_file_range(
+                &source_file,
+                Some(0),
+                &des_file,
+                Some(0),
+                source_file_len as _,
+            )
+            .unwrap()
+        );
+
+        let mut buf = [0_u8; 10];
+        assert_eq!(10, read(&des_file, &mut buf).unwrap());
+
+        unlink(source).unwrap();
+        unlink(des).unwrap();
     }
 }
