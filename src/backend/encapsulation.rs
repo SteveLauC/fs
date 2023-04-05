@@ -719,7 +719,7 @@ impl Dir {
         }
 
         if let Some(entry) = self.entries.pop_front() {
-            Some(Ok(entry)) 
+            Some(Ok(entry))
         } else {
             None
         }

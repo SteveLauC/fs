@@ -7,35 +7,35 @@ use std::os::unix::fs::FileTypeExt;
 pub struct FileType(pub(crate) encapsulation::FileType);
 
 impl FileType {
-    /// Tests whether this file type represents a directory. The result is 
-    /// mutually exclusive to the results of `is_file` and `is_symlink`; only 
+    /// Tests whether this file type represents a directory. The result is
+    /// mutually exclusive to the results of `is_file` and `is_symlink`; only
     /// zero or one of these tests may pass.
     #[inline]
     pub fn is_dir(&self) -> bool {
         self.0 == encapsulation::FileType::Directory
     }
 
-    /// Tests whether this file type represents a regular file. The result is 
-    /// mutually exclusive to the results of `is_dir` and `is_symlink`; only zero 
+    /// Tests whether this file type represents a regular file. The result is
+    /// mutually exclusive to the results of `is_dir` and `is_symlink`; only zero
     /// or one of these tests may pass.
     ///
-    /// When the goal is simply to read from (or write to) the source, the most 
+    /// When the goal is simply to read from (or write to) the source, the most
     /// reliable way to test the source can be read (or written to) is to open it.
-    /// Only using `is_file` can break workflows like `diff <( prog_a )` on a 
-    /// Unix-like system for example. See `File::open` or `OpenOptions::open` 
+    /// Only using `is_file` can break workflows like `diff <( prog_a )` on a
+    /// Unix-like system for example. See `File::open` or `OpenOptions::open`
     /// for more information.
     #[inline]
     pub fn is_file(&self) -> bool {
         self.0 == encapsulation::FileType::RegularFile
     }
 
-    /// Tests whether this file type represents a symbolic link. The result is 
-    /// mutually exclusive to the results of `is_dir` and `is_file`; only zero or 
+    /// Tests whether this file type represents a symbolic link. The result is
+    /// mutually exclusive to the results of `is_dir` and `is_file`; only zero or
     /// one of these tests may pass.
     ///
-    /// The underlying Metadata struct needs to be retrieved with the 
-    /// `fs::symlink_metadata` function and not the `fs::metadata` function. 
-    /// The `fs::metadata` function follows symbolic links, so `is_symlink` 
+    /// The underlying Metadata struct needs to be retrieved with the
+    /// `fs::symlink_metadata` function and not the `fs::metadata` function.
+    /// The `fs::metadata` function follows symbolic links, so `is_symlink`
     /// would always return false for the target file.
     #[inline]
     pub fn is_symlink(&self) -> bool {

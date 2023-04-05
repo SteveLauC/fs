@@ -17,9 +17,9 @@ use std::{
 };
 
 /// An object providing access to an open file on the filesystem.
-/// 
-/// An instance of a File can be read and/or written depending on what options 
-/// it was opened with. Files also implement Seek to alter the logical cursor 
+///
+/// An instance of a File can be read and/or written depending on what options
+/// it was opened with. Files also implement Seek to alter the logical cursor
 /// that the file contains internally.
 ///
 /// Files are automatically closed when they go out of scope. Errors detected on

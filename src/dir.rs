@@ -44,7 +44,7 @@ pub struct DirEntry(pub(crate) encapsulation::Dirent);
 impl DirEntry {
     /// Returns the full path to the file that this entry represents.
     ///
-    /// The full path is created by joining the original path to `read_dir` with 
+    /// The full path is created by joining the original path to `read_dir` with
     /// the filename of this entry.
     #[inline]
     pub fn path(&self) -> PathBuf {
@@ -112,13 +112,12 @@ mod test {
 
     #[test]
     fn empty_dir() {
-        let temp_dir =TempDir::new("test_empty_dir").unwrap();
+        let temp_dir = TempDir::new("test_empty_dir").unwrap();
         let temp_dir_path = temp_dir.path();
 
         let mut dir = crate::functions::read_dir(temp_dir_path).unwrap();
         let none = dir.next();
 
         assert!(none.is_none());
-
     }
 }
