@@ -2,19 +2,20 @@ use std::{
     collections::VecDeque,
     env::current_dir,
     ffi::OsString,
-    io::Result,
+    io::{Error, ErrorKind, Result},
     path::{Path, PathBuf},
 };
 
+/// `realpath(3)` parser.
 #[derive(Debug)]
-struct Paths {
-    pub parsed: PathBuf,
-    pub remained: VecDeque<OsString>,
+struct RealpathParser {
+    parsed: PathBuf,
+    remaining: VecDeque<OsString>,
 }
 
-impl Paths {
+impl RealpathParser {
     /// Construct a new [`Paths`] struct
-    fn new<P>(parsed: Option<PathBuf>, remained: Option<P>) -> Self
+    fn new<P>(parsed: Option<PathBuf>, remaining: Option<P>) -> Self
     where
         P: AsRef<Path>,
     {
@@ -22,16 +23,16 @@ impl Paths {
             Some(p) => p,
             None => PathBuf::new(),
         };
-        let remained = match remained {
+        let remaining = match remaining {
             Some(r) => r
                 .as_ref()
-                .components()
+                .components() // this will normailize it
                 .map(|com| com.as_os_str().to_owned())
                 .collect(),
             None => VecDeque::new(),
         };
 
-        Self { parsed, remained }
+        Self { parsed, remaining }
     }
 
     #[inline]
@@ -64,7 +65,7 @@ impl Paths {
 
     #[inline]
     fn remained_next_entry(&mut self) -> Option<OsString> {
-        self.remained.pop_front()
+        self.remaining.pop_front()
     }
 
     #[inline]
@@ -75,7 +76,7 @@ impl Paths {
             .rev()
             .map(|com| com.as_os_str().to_owned())
             .for_each(|item| {
-                self.remained.push_front(item);
+                self.remaining.push_front(item);
             });
     }
 }
@@ -93,43 +94,52 @@ fn is_a_pair_of_dots<P: AsRef<Path>>(path: P) -> bool {
 /// return the canonicalized absolute pathname
 pub(crate) fn realpath<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
     let cwd = current_dir().expect("can not get cwd");
-    let mut paths = Paths::new(
+    let mut parser = RealpathParser::new(
         if path.as_ref().is_absolute() {
-            None
+            Some(PathBuf::from("/"))
         } else {
             Some(cwd)
         },
         Some(path),
     );
 
-    while let Some(entry) = paths.remained_next_entry() {
+    while let Some(entry) = parser.remained_next_entry() {
+        // Check the `parsed` part exists before we proceed
+        if parser.parsed.try_exists()? == false {
+            return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
+        }
+
         if is_dot(entry.as_os_str()) {
             continue;
         } else if is_a_pair_of_dots(entry.as_os_str()) {
-            paths.parsed_cd_to_parent();
+            parser.parsed_cd_to_parent();
         } else {
-            paths.parsed_push_back(entry);
+            parser.parsed_push_back(entry);
         }
 
-        if paths.parsed.is_symlink() {
-            let link_content = paths.parsed.read_link().expect("can not follow symlink");
+        if parser.parsed.is_symlink() {
+            let link_content = parser.parsed.read_link().expect("can not follow symlink");
             if link_content.is_absolute() {
                 let clean_link: PathBuf = link_content.components().collect();
-                paths.replace_parsed_with(clean_link);
+                parser.replace_parsed_with(clean_link);
             } else {
-                paths.parsed_cd_to_parent();
-                paths.remained_push_front(link_content);
+                parser.parsed_cd_to_parent();
+                parser.remained_push_front(link_content);
             }
         }
     }
 
-    Ok(paths.parsed.clone())
+    Ok(parser.parsed.clone())
 }
 
 #[cfg(test)]
 mod test {
     use super::realpath;
-    use std::{env::current_dir, path::Path};
+    use std::{
+        env::current_dir,
+        fs::{create_dir, create_dir_all, remove_dir, remove_dir_all},
+        path::Path,
+    };
 
     #[test]
     fn test1() {
@@ -145,35 +155,36 @@ mod test {
 
     #[test]
     fn test3() {
+        create_dir("test3").unwrap();
         let cwd = current_dir().expect("can not get cwd");
-        let res3 = realpath("test/..");
+        let res3 = realpath("test3/..");
         assert_eq!(res3.unwrap(), cwd);
+
+        remove_dir("test3").unwrap();
     }
 
     #[test]
     fn test4() {
+        create_dir_all("test4/path").unwrap();
         let mut cwd = current_dir().expect("can not get cwd");
-        let res4 = realpath("test/path/..");
-        cwd.push("test");
+        let res4 = realpath("test4/path/..");
+        cwd.push("test4");
 
         assert_eq!(res4.unwrap(), cwd);
+        remove_dir_all("test4").unwrap();
     }
 
     #[test]
     fn test5() {
+        create_dir("test5").unwrap();
+        create_dir("path").unwrap();
         let mut cwd = current_dir().expect("can not get cwd");
-        let res5 = realpath("test/../path");
+        let res5 = realpath("test5/../path");
         cwd.push("path");
 
         assert_eq!(res5.unwrap(), cwd);
-    }
 
-    #[test]
-    fn test6() {
-        let mut cwd = current_dir().expect("can not get cwd");
-        let res6 = realpath("test/../path");
-        cwd.push("path");
-
-        assert_eq!(res6.unwrap(), cwd);
+        remove_dir("test5").unwrap();
+        remove_dir("path").unwrap();
     }
 }
