@@ -32,8 +32,20 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 
 /// Copies the contents of one file to another. This function will also copy
 /// the permission bits of the original file to the destination file.
-pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(_from: P, _to: Q) -> Result<u64> {
-    todo!()
+///
+/// This function will overwrite the contents of to.
+pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<u64> {
+    let from = File::open(from)?;
+    let to = File::create(to)?;
+    let from_meta = from.metadata()?;
+    let from_len = from_meta.len();
+    let from_permission = from_meta.permission();
+
+    let num_written =
+        encapsulation::copy_file_range(&from, Some(0), &to, Some(0), from_len as usize)?;
+    to.set_permissions(from_permission)?;
+
+    Ok(num_written as u64)
 }
 
 /// create_dir: Creates a new, empty directory at the provided path
@@ -95,11 +107,31 @@ pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
     encapsulation::rmdir(path)
 }
 
+fn _remove_dir_recurisive(path: &Path) -> Result<()> {
+    let read_dir = read_dir(path)?;
+    for item_res in read_dir {
+        let item = item_res?;
+
+        let file_type = item.file_type()?;
+        if file_type.is_dir() {
+            _remove_dir_recurisive(&item.path())?;
+        } else {
+            remove_file(item.path())?;
+        }
+    }
+
+    // remove the directory itself
+    remove_dir(path)
+}
+
 /// Removes a directory at this path, after removing all its contents. Use
 /// carefully!
-pub fn remove_dir_all<P: AsRef<Path>>(_path: P) -> Result<()> {
-    // TODO(SteveLauC)
-    todo!()
+pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
+    if symlink_metadata(path.as_ref())?.is_symlink() {
+        remove_file(path)
+    } else {
+        _remove_dir_recurisive(path.as_ref())
+    }
 }
 
 /// Removes a file from the filesystem.
@@ -157,8 +189,49 @@ pub fn chroot<P: AsRef<Path>>(dir: P) -> Result<()> {
     encapsulation::chroot(dir)
 }
 
-/// Creates a new symbolic link on the filesystem.!
+/// Creates a new symbolic link on the filesystem.
 #[inline]
 pub fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> Result<()> {
     encapsulation::symlink(original, link)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_copy() {
+        let from = "/tmp/test_copy_from";
+        let mut from_file = std::fs::File::create(from).unwrap();
+        let to = "/tmp/test_copy_to";
+        from_file.write(b"hello").unwrap();
+
+        assert_eq!(5, copy(from, to).unwrap());
+
+        remove_file(from).unwrap();
+        remove_file(to).unwrap();
+    }
+
+    #[test]
+    fn test_remove_dir_all() {
+        // Create dir
+        create_dir("/tmp/dir").unwrap();
+        File::create("/tmp/dir/1").unwrap();
+        File::create("/tmp/dir/2").unwrap();
+        File::create("/tmp/dir/3").unwrap();
+        create_dir_all("/tmp/dir/dir2/dir3/dir4").unwrap();
+
+        // delete them
+        remove_dir_all("/tmp/dir").unwrap();
+    }
+
+    #[test]
+    fn test_remove_dir_all_symlink() {
+        File::create("/tmp/test_remove_dir_all_symlink").unwrap();
+        symlink("/tmp/test_remove_dir_all_symlink", "/tmp/test_remove_dir_all_symlink_link").unwrap();
+
+        remove_dir_all("/tmp/test_remove_dir_all_symlink_link").unwrap();
+
+        remove_file("/tmp/test_remove_dir_all_symlink").unwrap();
+    }
 }
