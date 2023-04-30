@@ -161,7 +161,7 @@ pub(crate) fn pread<Fd: AsFd>(fd: Fd, buf: &mut [u8], offset: u64) -> Result<usi
 }
 
 /// Write to a file at the given offset
-pub(crate) fn pwrite<Fd: AsFd>(fd: &Fd, buf: &[u8], offset: u64) -> Result<usize> {
+pub(crate) fn pwrite<Fd: AsFd>(fd: Fd, buf: &[u8], offset: u64) -> Result<usize> {
     let raw_fd = fd.as_fd().as_raw_fd();
     let offset = offset as libc::off_t;
 

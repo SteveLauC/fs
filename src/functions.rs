@@ -75,8 +75,9 @@ pub fn metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 
 /// Read the entire contents of a file into a bytes vector.
 pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
-    let mut file = File::open(path)?;
-    let mut bytes = Vec::new();
+    let mut file = File::open(path.as_ref())?;
+    let metadata = symlink_metadata(path.as_ref())?;
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
     file.read_to_end(&mut bytes)?;
     Ok(bytes)
 }
