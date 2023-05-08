@@ -7,6 +7,8 @@ A toy `std::fs` implementation that does NOT depend on `libc` (raw syscall).
 This crate is **ONLY** guaranteed to work on `x86_64-unknown-linux-gnu`, playing 
 it on other platforms may elicit **Undefined Behavior**.
 
+> Really a toy implementation, certain features may even not work.
+
 ## Table Of Contents
 
 * [Getting Started](https://github.com/SteveLauC/fs#getting-started)
@@ -14,7 +16,7 @@ it on other platforms may elicit **Undefined Behavior**.
     * [Modules](https://github.com/SteveLauC/fs#modules)
     * [Backend](https://github.com/SteveLauC/fs#backend)
 * [Benchmark](https://github.com/SteveLauC/fs#benchmark)
-* [Funny Stuff](https://github.com/SteveLauC/fs#funny-stuff)
+* [Why Build this crate](https://github.com/SteveLauC/fs#why-build-this-crate)
 
 ## Getting Started
 
