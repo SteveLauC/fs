@@ -164,7 +164,7 @@ This crate is "unfortunately" much slower than the stdlib:
 
 ## Why build this crate
 1. They are some voices in the community stating that we should make the stdlib
-   do not depend on libc for better performance. And forks at `rustix` are already 
+   do not depend on libc for better performance. And folks at `rustix` are already 
    working on that.
    
    So I am curious if I can do such things...
