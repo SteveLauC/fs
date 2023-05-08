@@ -229,7 +229,11 @@ mod test {
     #[test]
     fn test_remove_dir_all_symlink() {
         File::create("/tmp/test_remove_dir_all_symlink").unwrap();
-        symlink("/tmp/test_remove_dir_all_symlink", "/tmp/test_remove_dir_all_symlink_link").unwrap();
+        symlink(
+            "/tmp/test_remove_dir_all_symlink",
+            "/tmp/test_remove_dir_all_symlink_link",
+        )
+        .unwrap();
 
         remove_dir_all("/tmp/test_remove_dir_all_symlink_link").unwrap();
 

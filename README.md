@@ -1,17 +1,19 @@
 ## fs
+
 [![BUILD](https://github.com/stevelauc/pup/workflows/Rust/badge.svg)](https://github.com/stevelauc/fs/actions/workflows/rust.yml)
 [![License](http://img.shields.io/badge/license-GPL-orange.svg)](https://github.com/SteveLuaC/extattr/blob/main/LICENSE)
 
-A toy file system standard library implementation that does NOT depend on `libc`
-(raw syscall). This crate is **ONLY** guaranteed to work on `x86_64-unknown-linux-gnu`,
-playing it on other platforms may elicit **Undefined Behavior**.
+A toy `std::fs` implementation that does NOT depend on `libc` (raw syscall). 
+This crate is **ONLY** guaranteed to work on `x86_64-unknown-linux-gnu`, playing 
+it on other platforms may elicit **Undefined Behavior**.
 
 ## Table Of Contents
 
 * [Getting Started](https://github.com/SteveLauC/fs#getting-started)
 * [Project Hierarchy](https://github.com/SteveLauC/fs#project-hierarchy)
-  * [Modules](https://github.com/SteveLauC/fs#modules)
-  * [Backend](https://github.com/SteveLauC/fs#backend)
+    * [Modules](https://github.com/SteveLauC/fs#modules)
+    * [Backend](https://github.com/SteveLauC/fs#backend)
+* [Benchmark](https://github.com/SteveLauC/fs#benchmark)
 * [Funny Stuff](https://github.com/SteveLauC/fs#funny-stuff)
 
 ## Getting Started
@@ -27,8 +29,8 @@ fs = { git = "https://github.com/SteveLauC/fs" }
 use fs::OpenOptions;
 
 fn main() {
-  let cwd = OpenOptions::new().read(true).open(".").unwrap();
-  println!("{:?}", cwd);
+    let cwd = OpenOptions::new().read(true).open(".").unwrap();
+    println!("{:?}", cwd);
 }
 ```
 
@@ -41,8 +43,8 @@ File { fd: 3, path: "/home/steve/Documents/workspace/rust", read: true, write: f
 
 #### Modules
 
-The source code of this crate is divided according to some key types( e.g., for
-anything related with `struct File` is placed in `file.rs`):
+The source code of this crate is divided by types. For example, anything related
+to `struct File` is placed in `file.rs`):
 
 ```shell
 $ cargo modules generate tree
@@ -93,8 +95,9 @@ Permissions Links Size User  Group Date Modified Name
 .rw-r--r--@     1 4.7k steve steve 26 Dec 14:58  realpath.rs
 ```
 
-To make my life easier, I implemented some libc-like syscalls in `libc_like_syscall.rs`
-first, take `open(2)` as an example:
+To make my life easier, the backend of this project is separated into two parts.
+First, I implemented some libc-like syscalls in `libc_like_syscall.rs`, take
+`open(2)` as an example:
 
 ```c
 // Interface exposed by glibc
@@ -121,8 +124,8 @@ pub(crate) fn open(
 You can find that in the perspective of interface, they are basically equivalent
 except the return type.
 
-Then to make the interfaces more rusty, I made another abstraction layer in
-`encapsulation.rs`:
+Then to make these interfaces more rusty, I made another Rusty encapsulation layer
+(like `nix` or `rustix`) in `encapsulation.rs`:
 
 ```rust
 // open in encapsulation.rs
@@ -146,10 +149,22 @@ pub(crate) fn open<P: AsRef<Path>>(
 }
 ```
 
-As you can see, the types of arguments become rusty and less error-prone.
+As you can see, the types of arguments become rusty and thus less error-prone.
 
-## Funny Stuff
+## Benchmark
 
-The process of implementing this crate is more about reading the code from the
-Rust stdlib. During my reading, I record those interesting stuff in 
-[funny_stuff.md](./funny_stuff.md).
+This crate is "unfortunately" much slower than the stdlib:
+
+|         | Root Dir Iterating | Read a 137M file with buffer set to 10B(Kernel buffer cleared) |
+|---------|--------------------|----------------------------------------------------------------|
+| std::fs | 20.298µs           | 3.44s                                                          |
+| My impl | 27.722µs           | 3.92s                                                          |
+
+## Why build this crate
+1. They are some voices in the community stating that we should make the stdlib
+   do not depend on libc for better performance. And forks at `rustix` are already 
+   working on that.
+   
+   So I am curious if I can do such things...
+   
+2. For fun.
